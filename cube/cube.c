@@ -1793,6 +1793,11 @@ void demo_prepare_cube_data_buffers(struct demo *demo) {
     buf_info.size = sizeof(data);
 
     for (unsigned int i = 0; i < demo->swapchainImageCount; i++) {
+        VkBufferDeviceAddressCreateInfoEXT BDAci = {};
+        BDAci.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_CREATE_INFO_EXT;
+        BDAci.deviceAddress = i*100;
+        buf_info.pNext = &BDAci;
+
         err = vkCreateBuffer(demo->device, &buf_info, NULL, &demo->swapchain_image_resources[i].uniform_buffer);
         assert(!err);
 
@@ -1820,6 +1825,12 @@ void demo_prepare_cube_data_buffers(struct demo *demo) {
         err = vkBindBufferMemory(demo->device, demo->swapchain_image_resources[i].uniform_buffer,
                                  demo->swapchain_image_resources[i].uniform_memory, 0);
         assert(!err);
+        
+        VkBufferDeviceAddressInfo BDAinfo = {};
+        BDAinfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        BDAinfo.buffer = demo->swapchain_image_resources[i].uniform_buffer;
+        PFN_vkGetBufferDeviceAddressEXT pfn_vkGetBufferDeviceAddressEXT = (PFN_vkGetBufferDeviceAddressEXT)vkGetInstanceProcAddr(demo->inst, "vkGetBufferDeviceAddressEXT");
+        VkDeviceAddress add = pfn_vkGetBufferDeviceAddressEXT(demo->device, &BDAinfo);
     }
 }
 
@@ -3422,6 +3433,8 @@ static void demo_init_vk(struct demo *demo) {
     err = vkEnumerateDeviceExtensionProperties(demo->gpu, NULL, &device_extension_count, NULL);
     assert(!err);
 
+    bool support_VK_EXT_buffer_device_address = false;
+
     if (device_extension_count > 0) {
         VkExtensionProperties *device_extensions = malloc(sizeof(VkExtensionProperties) * device_extension_count);
         err = vkEnumerateDeviceExtensionProperties(demo->gpu, NULL, &device_extension_count, device_extensions);
@@ -3434,6 +3447,11 @@ static void demo_init_vk(struct demo *demo) {
             }
             if (!strcmp("VK_KHR_portability_subset", device_extensions[i].extensionName)) {
                 demo->extension_names[demo->enabled_extension_count++] = "VK_KHR_portability_subset";
+            }
+            if (!strcmp(VK_EXT_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, device_extensions[i].extensionName)) {
+                printf("Support VK_EXT_buffer_device_address\n");
+                support_VK_EXT_buffer_device_address = true;
+                demo->extension_names[demo->enabled_extension_count++] = VK_EXT_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME;
             }
             assert(demo->enabled_extension_count < 64);
         }
@@ -3477,6 +3495,11 @@ static void demo_init_vk(struct demo *demo) {
         }
 
         free(device_extensions);
+    }
+
+    if(!support_VK_EXT_buffer_device_address) {
+        ERR_EXIT("Not support VK_EXT_buffer_device_address",
+                 "vkCreateInstance Failure");       
     }
 
     if (!swapchainExtFound) {
@@ -3575,6 +3598,9 @@ static void demo_create_device(struct demo *demo) {
         queues[1].flags = 0;
         device.queueCreateInfoCount = 2;
     }
+    VkPhysicalDeviceBufferDeviceAddressFeaturesEXT physDevBDAFeatures = {};
+    physDevBDAFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT;
+    device.pNext = &physDevBDAFeatures;
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
 }
