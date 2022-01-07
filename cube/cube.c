@@ -397,6 +397,8 @@ struct demo {
     PFN_vkQueuePresentKHR fpQueuePresentKHR;
     PFN_vkGetRefreshCycleDurationGOOGLE fpGetRefreshCycleDurationGOOGLE;
     PFN_vkGetPastPresentationTimingGOOGLE fpGetPastPresentationTimingGOOGLE;
+    PFN_vkBindBufferMemory2 fpBindBufferMemory2;
+    PFN_vkBindImageMemory2 fpBindImageMemory2;
     uint32_t swapchainImageCount;
     VkSwapchainKHR swapchain;
     SwapchainImageResources *swapchain_image_resources;
@@ -1415,6 +1417,28 @@ static void demo_prepare_buffers(struct demo *demo) {
         demo->next_present_id = 1;
     }
 
+    VkBindImageMemorySwapchainInfoKHR bind_swapchain1_info = {0};
+    bind_swapchain1_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR;
+    bind_swapchain1_info.pNext = NULL;
+    bind_swapchain1_info.swapchain = demo->swapchain;
+    bind_swapchain1_info.imageIndex = 0;
+
+    VkBindImageMemorySwapchainInfoKHR bind_swapchain0_info = {0};
+    bind_swapchain0_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR;
+    bind_swapchain0_info.pNext = &bind_swapchain1_info;
+    bind_swapchain0_info.swapchain = demo->swapchain;
+    bind_swapchain0_info.imageIndex = 0;
+
+    VkBindImageMemoryInfo bind_image_info = {0};
+    bind_image_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+    bind_image_info.pNext = &bind_swapchain0_info;
+    bind_image_info.image = swapchainImages[0];
+    bind_image_info.memory = VK_NULL_HANDLE;
+    bind_image_info.memoryOffset = 0;
+
+    err = demo->fpBindImageMemory2(demo->device, 1, &bind_image_info);
+    assert(!err);
+
     if (NULL != swapchainImages) {
         free(swapchainImages);
     }
@@ -1450,7 +1474,6 @@ static void demo_prepare_depth(struct demo *demo) {
         .flags = 0,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
     };
-
 
     if (demo->force_errors) {
         // Intentionally force a bad pNext value to generate a validation layer error
@@ -1569,7 +1592,28 @@ static void demo_prepare_texture_buffer(struct demo *demo, const char *filename,
     assert(!err);
 
     /* bind memory */
-    err = vkBindBufferMemory(demo->device, tex_obj->buffer, tex_obj->mem, 0);
+    VkBindBufferMemoryDeviceGroupInfo bind_mdg1_info = {0};
+    bind_mdg1_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO;
+    bind_mdg1_info.pNext = NULL;
+    bind_mdg1_info.deviceIndexCount = 1;
+    uint32_t device_index = 0;
+    bind_mdg1_info.pDeviceIndices = &device_index;
+
+    VkBindBufferMemoryDeviceGroupInfo bind_mdg0_info = {0};
+    bind_mdg0_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO;
+    bind_mdg0_info.pNext = &bind_mdg1_info;
+    bind_mdg0_info.deviceIndexCount = 1;
+    bind_mdg0_info.pDeviceIndices = &device_index;
+
+    VkBindBufferMemoryInfo bind_buffer_info = {0};
+    bind_buffer_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO;
+    bind_buffer_info.pNext = &bind_mdg0_info;
+    bind_buffer_info.buffer = tex_obj->buffer;
+    bind_buffer_info.memory = tex_obj->mem;
+    bind_buffer_info.memoryOffset = 0;
+
+    err = demo->fpBindBufferMemory2(demo->device, 1, &bind_buffer_info);
+    // err = vkBindBufferMemory(demo->device, tex_obj->buffer, tex_obj->mem, 0);
     assert(!err);
 
     VkSubresourceLayout layout;
@@ -1637,7 +1681,25 @@ static void demo_prepare_texture_image(struct demo *demo, const char *filename, 
     assert(!err);
 
     /* bind memory */
-    err = vkBindImageMemory(demo->device, tex_obj->image, tex_obj->mem, 0);
+    VkBindImagePlaneMemoryInfo bind_plane1_info = {0};
+    bind_plane1_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO;
+    bind_plane1_info.pNext = NULL;
+    bind_plane1_info.planeAspect = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    VkBindImagePlaneMemoryInfo bind_plane0_info = {0};
+    bind_plane0_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO;
+    bind_plane0_info.pNext = &bind_plane1_info;
+    bind_plane0_info.planeAspect = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    VkBindImageMemoryInfo bind_image_info = {0};
+    bind_image_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+    bind_image_info.pNext = &bind_plane0_info;
+    bind_image_info.image = tex_obj->image;
+    bind_image_info.memory = tex_obj->mem;
+    bind_image_info.memoryOffset = 0;
+
+    err = demo->fpBindImageMemory2(demo->device, 1, &bind_image_info);
+    // err = vkBindImageMemory(demo->device, tex_obj->image, tex_obj->mem, 0);
     assert(!err);
 
     if (required_props & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
@@ -1827,9 +1889,30 @@ void demo_prepare_cube_data_buffers(struct demo *demo) {
         assert(!err);
 
         memcpy(demo->swapchain_image_resources[i].uniform_memory_ptr, &data, sizeof data);
+        
+        VkBindBufferMemoryDeviceGroupInfo bind_mdg1_info = {0};
+        bind_mdg1_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO;
+        bind_mdg1_info.pNext = NULL;
+        bind_mdg1_info.deviceIndexCount = 1;
+        uint32_t device_index = 0;
+        bind_mdg1_info.pDeviceIndices = &device_index;
 
-        err = vkBindBufferMemory(demo->device, demo->swapchain_image_resources[i].uniform_buffer,
-                                 demo->swapchain_image_resources[i].uniform_memory, 0);
+        VkBindBufferMemoryDeviceGroupInfo bind_mdg0_info = {0};
+        bind_mdg0_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO;
+        bind_mdg0_info.pNext = &bind_mdg1_info;
+        bind_mdg0_info.deviceIndexCount = 1;
+        bind_mdg0_info.pDeviceIndices = &device_index;
+
+        VkBindBufferMemoryInfo bind_buffer_info = {0};
+        bind_buffer_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO;
+        bind_buffer_info.pNext = &bind_mdg0_info;
+        bind_buffer_info.buffer = demo->swapchain_image_resources[i].uniform_buffer;
+        bind_buffer_info.memory = demo->swapchain_image_resources[i].uniform_memory;
+        bind_buffer_info.memoryOffset = 0;
+
+        err = demo->fpBindBufferMemory2(demo->device, 1, &bind_buffer_info);
+        // err = vkBindBufferMemory(demo->device, demo->swapchain_image_resources[i].uniform_buffer,
+        //                          demo->swapchain_image_resources[i].uniform_memory, 0);
         assert(!err);
     }
 }
@@ -3299,7 +3382,7 @@ static void demo_init_vk(struct demo *demo) {
         .applicationVersion = 0,
         .pEngineName = APP_SHORT_NAME,
         .engineVersion = 0,
-        .apiVersion = VK_API_VERSION_1_0,
+        .apiVersion = VK_API_VERSION_1_1,
     };
     VkInstanceCreateInfo inst_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -3588,6 +3671,8 @@ static void demo_create_device(struct demo *demo) {
     }
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
+    GET_DEVICE_PROC_ADDR(demo->device, BindBufferMemory2);
+    GET_DEVICE_PROC_ADDR(demo->device, BindImageMemory2);
 }
 
 static void demo_create_surface(struct demo *demo) {
