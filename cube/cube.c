@@ -1889,7 +1889,7 @@ void demo_prepare_cube_data_buffers(struct demo *demo) {
         assert(!err);
 
         memcpy(demo->swapchain_image_resources[i].uniform_memory_ptr, &data, sizeof data);
-        
+
         VkBindBufferMemoryDeviceGroupInfo bind_mdg1_info = {0};
         bind_mdg1_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO;
         bind_mdg1_info.pNext = NULL;
@@ -2219,13 +2219,18 @@ static void demo_prepare_descriptor_pool(struct demo *demo) {
                 .descriptorCount = demo->swapchainImageCount * DEMO_TEXTURE_COUNT,
             },
     };
-    const VkDescriptorPoolCreateInfo descriptor_pool = {
+    VkDescriptorPoolCreateInfo descriptor_pool = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .pNext = NULL,
         .maxSets = demo->swapchainImageCount,
         .poolSizeCount = 2,
         .pPoolSizes = type_counts,
     };
+    VkDescriptorPoolInlineUniformBlockCreateInfoEXT iub_ci = {0};
+    iub_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO_EXT;
+    iub_ci.pNext = NULL;
+    iub_ci.maxInlineUniformBlockBindings = 1;
+    descriptor_pool.pNext = &iub_ci;
     VkResult U_ASSERT_ONLY err;
 
     err = vkCreateDescriptorPool(demo->device, &descriptor_pool, NULL, &demo->desc_pool);
@@ -2256,12 +2261,21 @@ static void demo_prepare_descriptor_set(struct demo *demo) {
 
     memset(&writes, 0, sizeof(writes));
 
+    VkWriteDescriptorSetInlineUniformBlockEXT write_iub = {0};
+    write_iub.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT;
+
+    VkWriteDescriptorSetInlineUniformBlockEXT write_iub1 = {0};
+    write_iub1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT;
+    write_iub.pNext = &write_iub1;
+
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].pNext = &write_iub;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[0].pBufferInfo = &buffer_info;
 
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].pNext = &write_iub;
     writes[1].dstBinding = 1;
     writes[1].descriptorCount = DEMO_TEXTURE_COUNT;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -3211,7 +3225,7 @@ static void demo_init_vk(struct demo *demo) {
     VkResult err;
     uint32_t instance_extension_count = 0;
     uint32_t instance_layer_count = 0;
-    char *instance_validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
+    char *instance_validation_layers[] = {"VK_LAYER_LUNARG_gfxreconstruct"};
     demo->enabled_extension_count = 0;
     demo->enabled_layer_count = 0;
     demo->is_minimized = false;
@@ -3413,6 +3427,8 @@ static void demo_init_vk(struct demo *demo) {
         dbg_messenger_create_info.pfnUserCallback = debug_messenger_callback;
         dbg_messenger_create_info.pUserData = demo;
         inst_info.pNext = &dbg_messenger_create_info;
+        VkDebugUtilsMessengerCreateInfoEXT dbg_messenger_create_info1 = dbg_messenger_create_info;
+        dbg_messenger_create_info.pNext = &dbg_messenger_create_info1;
     }
 
     err = vkCreateInstance(&inst_info, NULL, &demo->inst);
@@ -3515,6 +3531,7 @@ static void demo_init_vk(struct demo *demo) {
 
     err = vkEnumerateDeviceExtensionProperties(demo->gpu, NULL, &device_extension_count, NULL);
     assert(!err);
+    bool is_VK_EXT_inline_uniform_block = false;
 
     if (device_extension_count > 0) {
         VkExtensionProperties *device_extensions = malloc(sizeof(VkExtensionProperties) * device_extension_count);
@@ -3529,8 +3546,13 @@ static void demo_init_vk(struct demo *demo) {
             if (!strcmp("VK_KHR_portability_subset", device_extensions[i].extensionName)) {
                 demo->extension_names[demo->enabled_extension_count++] = "VK_KHR_portability_subset";
             }
+            if (!strcmp("VK_EXT_inline_uniform_block", device_extensions[i].extensionName)) {
+                demo->extension_names[demo->enabled_extension_count++] = "VK_EXT_inline_uniform_block";
+                is_VK_EXT_inline_uniform_block = true;
+            }
             assert(demo->enabled_extension_count < 64);
         }
+        assert(is_VK_EXT_inline_uniform_block);
 
         if (demo->VK_KHR_incremental_present_enabled) {
             // Even though the user "enabled" the extension via the command
@@ -4047,7 +4069,7 @@ static void demo_init(struct demo *demo, int argc, char **argv) {
     demo->gpu_number = -1;
     demo->width = 500;
     demo->height = 500;
-
+    demo->validate = true;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--use_staging") == 0) {
             demo->use_staging_buffer = true;
