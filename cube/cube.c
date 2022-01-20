@@ -388,8 +388,12 @@ struct demo {
 
     PFN_vkGetPhysicalDeviceSurfaceSupportKHR fpGetPhysicalDeviceSurfaceSupportKHR;
     PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR fpGetPhysicalDeviceSurfaceCapabilitiesKHR;
+    PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR fpGetPhysicalDeviceSurfaceCapabilities2KHR;
     PFN_vkGetPhysicalDeviceSurfaceFormatsKHR fpGetPhysicalDeviceSurfaceFormatsKHR;
-    PFN_vkGetPhysicalDeviceSurfacePresentModesKHR fpGetPhysicalDeviceSurfacePresentModesKHR;
+    PFN_vkGetPhysicalDeviceSurfacePresentModes2EXT fpGetPhysicalDeviceSurfacePresentModes2EXT;
+    PFN_vkGetDeviceGroupSurfacePresentModes2EXT fpGetDeviceGroupSurfacePresentModes2EXT;
+    PFN_vkAcquireFullScreenExclusiveModeEXT fpAcquireFullScreenExclusiveModeEXT;
+    PFN_vkReleaseFullScreenExclusiveModeEXT fpReleaseFullScreenExclusiveModeEXT;
     PFN_vkCreateSwapchainKHR fpCreateSwapchainKHR;
     PFN_vkDestroySwapchainKHR fpDestroySwapchainKHR;
     PFN_vkGetSwapchainImagesKHR fpGetSwapchainImagesKHR;
@@ -1204,17 +1208,48 @@ static void demo_prepare_buffers(struct demo *demo) {
     VkResult U_ASSERT_ONLY err;
     VkSwapchainKHR oldSwapchain = demo->swapchain;
 
+    HMONITOR hmonitor = MonitorFromWindow(demo->window, MONITOR_DEFAULTTOPRIMARY);
+    VkSurfaceFullScreenExclusiveWin32InfoEXT surface_full_screen_exclusive_win32_info = {
+        .sType = VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_WIN32_INFO_EXT, .pNext = NULL, .hmonitor = hmonitor};
+
+    VkSurfaceFullScreenExclusiveInfoEXT surface_full_screen_exclusive_info = {
+        .sType = VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT,
+        .pNext = &surface_full_screen_exclusive_win32_info,
+        .fullScreenExclusive = VK_FULL_SCREEN_EXCLUSIVE_APPLICATION_CONTROLLED_EXT};
+
     // Check the surface capabilities and formats
-    VkSurfaceCapabilitiesKHR surfCapabilities;
-    err = demo->fpGetPhysicalDeviceSurfaceCapabilitiesKHR(demo->gpu, demo->surface, &surfCapabilities);
+    VkPhysicalDeviceSurfaceInfo2KHR surface_info = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
+                                                    .pNext = &surface_full_screen_exclusive_info,
+                                                    .surface = demo->surface};
+
+    VkSurfaceCapabilitiesFullScreenExclusiveEXT capabilities_full_screen_exclusive_info1 = {
+        .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_FULL_SCREEN_EXCLUSIVE_EXT,
+        .pNext = NULL,
+        .fullScreenExclusiveSupported = true};
+
+    VkSurfaceCapabilitiesFullScreenExclusiveEXT capabilities_full_screen_exclusive_info = {
+        .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_FULL_SCREEN_EXCLUSIVE_EXT,
+        .pNext = &capabilities_full_screen_exclusive_info1,
+        .fullScreenExclusiveSupported = true};
+
+    VkSurfaceCapabilities2KHR surf_capabilities = {.sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR,
+                                                   .pNext = &capabilities_full_screen_exclusive_info,
+                                                   .surfaceCapabilities = {0}};
+    err = demo->fpGetPhysicalDeviceSurfaceCapabilities2KHR(demo->gpu, &surface_info, &surf_capabilities);
     assert(!err);
 
+    const VkSurfaceCapabilitiesKHR surfCapabilities = surf_capabilities.surfaceCapabilities;
+
     uint32_t presentModeCount;
-    err = demo->fpGetPhysicalDeviceSurfacePresentModesKHR(demo->gpu, demo->surface, &presentModeCount, NULL);
+    err = demo->fpGetPhysicalDeviceSurfacePresentModes2EXT(demo->gpu, &surface_info, &presentModeCount, NULL);
     assert(!err);
     VkPresentModeKHR *presentModes = (VkPresentModeKHR *)malloc(presentModeCount * sizeof(VkPresentModeKHR));
     assert(presentModes);
-    err = demo->fpGetPhysicalDeviceSurfacePresentModesKHR(demo->gpu, demo->surface, &presentModeCount, presentModes);
+    err = demo->fpGetPhysicalDeviceSurfacePresentModes2EXT(demo->gpu, &surface_info, &presentModeCount, presentModes);
+    assert(!err);
+
+    VkDeviceGroupPresentModeFlagsKHR group_modes = 0;
+    err = demo->fpGetDeviceGroupSurfacePresentModes2EXT(demo->device, &surface_info, &group_modes);
     assert(!err);
 
     VkExtent2D swapchainExtent;
@@ -1332,7 +1367,7 @@ static void demo_prepare_buffers(struct demo *demo) {
 
     VkSwapchainCreateInfoKHR swapchain_ci = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .pNext = NULL,
+        .pNext = &surface_full_screen_exclusive_info,
         .surface = demo->surface,
         .minImageCount = desiredNumOfSwapchainImages,
         .imageFormat = demo->format,
@@ -1355,6 +1390,11 @@ static void demo_prepare_buffers(struct demo *demo) {
     };
     uint32_t i;
     err = demo->fpCreateSwapchainKHR(demo->device, &swapchain_ci, NULL, &demo->swapchain);
+    assert(!err);
+
+    // err = demo->fpAcquireFullScreenExclusiveModeEXT(demo->device, demo->swapchain);
+    // assert(!err);
+    err = demo->fpReleaseFullScreenExclusiveModeEXT(demo->device, demo->swapchain);
     assert(!err);
 
     // If we just re-created an existing swapchain, we should destroy the old
@@ -3532,6 +3572,7 @@ static void demo_init_vk(struct demo *demo) {
     err = vkEnumerateDeviceExtensionProperties(demo->gpu, NULL, &device_extension_count, NULL);
     assert(!err);
     bool is_VK_EXT_inline_uniform_block = false;
+    bool is_VK_EXT_full_screen_exclusive = false;
 
     if (device_extension_count > 0) {
         VkExtensionProperties *device_extensions = malloc(sizeof(VkExtensionProperties) * device_extension_count);
@@ -3550,9 +3591,14 @@ static void demo_init_vk(struct demo *demo) {
                 demo->extension_names[demo->enabled_extension_count++] = "VK_EXT_inline_uniform_block";
                 is_VK_EXT_inline_uniform_block = true;
             }
+            if (!strcmp("VK_EXT_full_screen_exclusive", device_extensions[i].extensionName)) {
+                demo->extension_names[demo->enabled_extension_count++] = "VK_EXT_full_screen_exclusive";
+                is_VK_EXT_full_screen_exclusive = true;
+            }
             assert(demo->enabled_extension_count < 64);
         }
         assert(is_VK_EXT_inline_uniform_block);
+        assert(is_VK_EXT_full_screen_exclusive);
 
         if (demo->VK_KHR_incremental_present_enabled) {
             // Even though the user "enabled" the extension via the command
@@ -3655,8 +3701,12 @@ static void demo_init_vk(struct demo *demo) {
 
     GET_INSTANCE_PROC_ADDR(demo->inst, GetPhysicalDeviceSurfaceSupportKHR);
     GET_INSTANCE_PROC_ADDR(demo->inst, GetPhysicalDeviceSurfaceCapabilitiesKHR);
+    GET_INSTANCE_PROC_ADDR(demo->inst, GetPhysicalDeviceSurfaceCapabilities2KHR);
     GET_INSTANCE_PROC_ADDR(demo->inst, GetPhysicalDeviceSurfaceFormatsKHR);
-    GET_INSTANCE_PROC_ADDR(demo->inst, GetPhysicalDeviceSurfacePresentModesKHR);
+    GET_INSTANCE_PROC_ADDR(demo->inst, GetPhysicalDeviceSurfacePresentModes2EXT);
+    GET_INSTANCE_PROC_ADDR(demo->inst, GetDeviceGroupSurfacePresentModes2EXT);
+    GET_INSTANCE_PROC_ADDR(demo->inst, AcquireFullScreenExclusiveModeEXT);
+    GET_INSTANCE_PROC_ADDR(demo->inst, ReleaseFullScreenExclusiveModeEXT);
     GET_INSTANCE_PROC_ADDR(demo->inst, GetSwapchainImagesKHR);
 }
 
