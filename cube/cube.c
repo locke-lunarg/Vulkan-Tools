@@ -1229,7 +1229,7 @@ static void demo_prepare_buffers(struct demo *demo) {
 
     VkSurfaceCapabilitiesFullScreenExclusiveEXT capabilities_full_screen_exclusive_info = {
         .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_FULL_SCREEN_EXCLUSIVE_EXT,
-        .pNext = &capabilities_full_screen_exclusive_info1,
+        .pNext = NULL,
         .fullScreenExclusiveSupported = true};
 
     VkSurfaceCapabilities2KHR surf_capabilities = {.sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR,
@@ -1465,7 +1465,7 @@ static void demo_prepare_buffers(struct demo *demo) {
 
     VkBindImageMemorySwapchainInfoKHR bind_swapchain0_info = {0};
     bind_swapchain0_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR;
-    bind_swapchain0_info.pNext = &bind_swapchain1_info;
+    bind_swapchain0_info.pNext = NULL;
     bind_swapchain0_info.swapchain = demo->swapchain;
     bind_swapchain0_info.imageIndex = 0;
 
@@ -1641,7 +1641,7 @@ static void demo_prepare_texture_buffer(struct demo *demo, const char *filename,
 
     VkBindBufferMemoryDeviceGroupInfo bind_mdg0_info = {0};
     bind_mdg0_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO;
-    bind_mdg0_info.pNext = &bind_mdg1_info;
+    bind_mdg0_info.pNext = NULL;
     bind_mdg0_info.deviceIndexCount = 1;
     bind_mdg0_info.pDeviceIndices = &device_index;
 
@@ -1728,7 +1728,7 @@ static void demo_prepare_texture_image(struct demo *demo, const char *filename, 
 
     VkBindImagePlaneMemoryInfo bind_plane0_info = {0};
     bind_plane0_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO;
-    bind_plane0_info.pNext = &bind_plane1_info;
+    bind_plane0_info.pNext = NULL;
     bind_plane0_info.planeAspect = VK_IMAGE_ASPECT_COLOR_BIT;
 
     VkBindImageMemoryInfo bind_image_info = {0};
@@ -1939,7 +1939,7 @@ void demo_prepare_cube_data_buffers(struct demo *demo) {
 
         VkBindBufferMemoryDeviceGroupInfo bind_mdg0_info = {0};
         bind_mdg0_info.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO;
-        bind_mdg0_info.pNext = &bind_mdg1_info;
+        bind_mdg0_info.pNext = NULL;
         bind_mdg0_info.deviceIndexCount = 1;
         bind_mdg0_info.pDeviceIndices = &device_index;
 
@@ -2306,7 +2306,7 @@ static void demo_prepare_descriptor_set(struct demo *demo) {
 
     VkWriteDescriptorSetInlineUniformBlockEXT write_iub1 = {0};
     write_iub1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT;
-    write_iub.pNext = &write_iub1;
+    write_iub.pNext = NULL;
 
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[0].pNext = &write_iub;
@@ -3467,8 +3467,8 @@ static void demo_init_vk(struct demo *demo) {
         dbg_messenger_create_info.pfnUserCallback = debug_messenger_callback;
         dbg_messenger_create_info.pUserData = demo;
         inst_info.pNext = &dbg_messenger_create_info;
-        VkDebugUtilsMessengerCreateInfoEXT dbg_messenger_create_info1 = dbg_messenger_create_info;
-        dbg_messenger_create_info.pNext = &dbg_messenger_create_info1;
+        //VkDebugUtilsMessengerCreateInfoEXT dbg_messenger_create_info1 = dbg_messenger_create_info;
+        //dbg_messenger_create_info.pNext = NULL;
     }
 
     err = vkCreateInstance(&inst_info, NULL, &demo->inst);
