@@ -1394,8 +1394,8 @@ static void demo_prepare_buffers(struct demo *demo) {
 
     // err = demo->fpAcquireFullScreenExclusiveModeEXT(demo->device, demo->swapchain);
     // assert(!err);
-    err = demo->fpReleaseFullScreenExclusiveModeEXT(demo->device, demo->swapchain);
-    assert(!err);
+    //err = demo->fpReleaseFullScreenExclusiveModeEXT(demo->device, demo->swapchain);
+    //assert(!err);
 
     // If we just re-created an existing swapchain, we should destroy the old
     // swapchain at this point.
@@ -2270,7 +2270,7 @@ static void demo_prepare_descriptor_pool(struct demo *demo) {
     iub_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO_EXT;
     iub_ci.pNext = NULL;
     iub_ci.maxInlineUniformBlockBindings = 1;
-    descriptor_pool.pNext = &iub_ci;
+    //descriptor_pool.pNext = &iub_ci;
     VkResult U_ASSERT_ONLY err;
 
     err = vkCreateDescriptorPool(demo->device, &descriptor_pool, NULL, &demo->desc_pool);
@@ -2309,13 +2309,13 @@ static void demo_prepare_descriptor_set(struct demo *demo) {
     write_iub.pNext = NULL;
 
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[0].pNext = &write_iub;
+    writes[0].pNext = NULL;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[0].pBufferInfo = &buffer_info;
 
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].pNext = &write_iub;
+    writes[1].pNext = NULL;
     writes[1].dstBinding = 1;
     writes[1].descriptorCount = DEMO_TEXTURE_COUNT;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
