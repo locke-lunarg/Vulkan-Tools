@@ -1219,7 +1219,7 @@ static void demo_prepare_buffers(struct demo *demo) {
 
     // Check the surface capabilities and formats
     VkPhysicalDeviceSurfaceInfo2KHR surface_info = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
-                                                    .pNext = &surface_full_screen_exclusive_info,
+                                                    .pNext = NULL,
                                                     .surface = demo->surface};
 
     VkSurfaceCapabilitiesFullScreenExclusiveEXT capabilities_full_screen_exclusive_info1 = {
@@ -1233,7 +1233,7 @@ static void demo_prepare_buffers(struct demo *demo) {
         .fullScreenExclusiveSupported = true};
 
     VkSurfaceCapabilities2KHR surf_capabilities = {.sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR,
-                                                   .pNext = &capabilities_full_screen_exclusive_info,
+                                                   .pNext = NULL,
                                                    .surfaceCapabilities = {0}};
     err = demo->fpGetPhysicalDeviceSurfaceCapabilities2KHR(demo->gpu, &surface_info, &surf_capabilities);
     assert(!err);
@@ -1248,9 +1248,9 @@ static void demo_prepare_buffers(struct demo *demo) {
     err = demo->fpGetPhysicalDeviceSurfacePresentModes2EXT(demo->gpu, &surface_info, &presentModeCount, presentModes);
     assert(!err);
 
-    VkDeviceGroupPresentModeFlagsKHR group_modes = 0;
-    err = demo->fpGetDeviceGroupSurfacePresentModes2EXT(demo->device, &surface_info, &group_modes);
-    assert(!err);
+    //VkDeviceGroupPresentModeFlagsKHR group_modes = 0;
+    //err = demo->fpGetDeviceGroupSurfacePresentModes2EXT(demo->device, &surface_info, &group_modes);
+    //assert(!err);
 
     VkExtent2D swapchainExtent;
     // width and height are either both 0xFFFFFFFF, or both not 0xFFFFFFFF.
@@ -1367,7 +1367,7 @@ static void demo_prepare_buffers(struct demo *demo) {
 
     VkSwapchainCreateInfoKHR swapchain_ci = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .pNext = &surface_full_screen_exclusive_info,
+        .pNext = NULL,
         .surface = demo->surface,
         .minImageCount = desiredNumOfSwapchainImages,
         .imageFormat = demo->format,
