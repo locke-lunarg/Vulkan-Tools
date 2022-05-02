@@ -311,6 +311,7 @@ char const *to_string(VkPhysicalDeviceType const type) {
 
 typedef struct {
     VkImage image;
+    VkImage virtual_image;
     VkCommandBuffer cmd;
     VkCommandBuffer graphics_to_present_cmd;
     VkImageView view;
@@ -1412,7 +1413,27 @@ static void demo_prepare_buffers(struct demo *demo) {
 
         demo->swapchain_image_resources[i].image = swapchainImages[i];
 
-        color_image_view.image = demo->swapchain_image_resources[i].image;
+        VkImageCreateInfo image_create_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        image_create_info.pNext = NULL;
+        image_create_info.flags = 0;
+        image_create_info.imageType = VK_IMAGE_TYPE_2D;
+        image_create_info.format = swapchain_ci.imageFormat;
+        image_create_info.extent.width = swapchain_ci.imageExtent.width;
+        image_create_info.extent.height = swapchain_ci.imageExtent.height;
+        image_create_info.extent.depth = 1;
+        image_create_info.mipLevels = 1;
+        image_create_info.arrayLayers = swapchain_ci.imageArrayLayers;
+        image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+        image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        image_create_info.usage = swapchain_ci.imageUsage;
+        image_create_info.sharingMode = swapchain_ci.imageSharingMode;
+        image_create_info.queueFamilyIndexCount = 0;
+        image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        err = vkCreateImage(demo->device, &image_create_info, NULL, &demo->swapchain_image_resources[i].virtual_image);
+        assert(!err);
+
+        color_image_view.image = demo->swapchain_image_resources[i].virtual_image;
 
         err = vkCreateImageView(demo->device, &color_image_view, NULL, &demo->swapchain_image_resources[i].view);
         assert(!err);
@@ -3247,10 +3268,10 @@ static void demo_init_vk(struct demo *demo) {
             }
             // We want cube to be able to enumerate drivers that support the portability_subset extension, so we have to enable the
             // portability enumeration extension.
-            if (!strcmp(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, instance_extensions[i].extensionName)) {
-                portabilityEnumerationActive = true;
-                demo->extension_names[demo->enabled_extension_count++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
-            }
+            //if (!strcmp(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, instance_extensions[i].extensionName)) {
+            //    portabilityEnumerationActive = true;
+            //    demo->extension_names[demo->enabled_extension_count++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+            //}
             assert(demo->enabled_extension_count < 64);
         }
 
@@ -3327,7 +3348,7 @@ static void demo_init_vk(struct demo *demo) {
     VkInstanceCreateInfo inst_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pNext = NULL,
-        .flags = (portabilityEnumerationActive ? VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR : 0),
+        .flags = 0,
         .pApplicationInfo = &app,
         .enabledLayerCount = demo->enabled_layer_count,
         .ppEnabledLayerNames = (const char *const *)instance_validation_layers,
