@@ -472,6 +472,14 @@ struct demo {
     PFN_vkCmdEndDebugUtilsLabelEXT CmdEndDebugUtilsLabelEXT;
     PFN_vkCmdInsertDebugUtilsLabelEXT CmdInsertDebugUtilsLabelEXT;
     PFN_vkSetDebugUtilsObjectNameEXT SetDebugUtilsObjectNameEXT;
+    PFN_vkCmdSetEvent2KHR CmdSetEvent2KHR;
+    PFN_vkCmdResetEvent2KHR CmdResetEvent2KHR;
+    PFN_vkCmdWaitEvents2KHR CmdWaitEvents2KHR;
+    PFN_vkCmdPipelineBarrier2KHR CmdPipelineBarrier2KHR;
+    PFN_vkCmdWriteTimestamp2KHR CmdWriteTimestamp2KHR;
+    PFN_vkQueueSubmit2KHR QueueSubmit2KHR;
+    PFN_vkCmdWriteBufferMarker2AMD CmdWriteBufferMarker2AMD;
+    PFN_vkGetQueueCheckpointData2NV GetQueueCheckpointData2NV;
     VkDebugUtilsMessengerEXT dbg_messenger;
 
     uint32_t current_buffer;
@@ -659,7 +667,7 @@ static void demo_flush_init_cmd(struct demo *demo) {
     assert(!err);
 
     const VkCommandBuffer cmd_bufs[] = {demo->cmd};
-    VkSubmitInfo submit_info = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    /* VkSubmitInfo submit_info = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
                                 .pNext = NULL,
                                 .waitSemaphoreCount = 0,
                                 .pWaitSemaphores = NULL,
@@ -669,7 +677,21 @@ static void demo_flush_init_cmd(struct demo *demo) {
                                 .signalSemaphoreCount = 0,
                                 .pSignalSemaphores = NULL};
 
-    err = vkQueueSubmit(demo->graphics_queue, 1, &submit_info, fence);
+    err = vkQueueSubmit(demo->graphics_queue, 1, &submit_info, fence);*/
+    VkCommandBufferSubmitInfo cmd_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .commandBuffer = demo->cmd,
+    };
+    VkSubmitInfo2 submit_info = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                                 .pNext = NULL,
+                                 .waitSemaphoreInfoCount = 0,
+                                 .pWaitSemaphoreInfos = NULL,
+                                 .commandBufferInfoCount = 1,
+                                 .pCommandBufferInfos = &cmd_info,
+                                 .signalSemaphoreInfoCount = 0,
+                                 .pSignalSemaphoreInfos = NULL};
+
+    err = demo->QueueSubmit2KHR(demo->graphics_queue, 1, &submit_info, fence);
     assert(!err);
 
     err = vkWaitForFences(demo->device, 1, &fence, VK_TRUE, UINT64_MAX);
@@ -681,11 +703,13 @@ static void demo_flush_init_cmd(struct demo *demo) {
 }
 
 static void demo_set_image_layout(struct demo *demo, VkImage image, VkImageAspectFlags aspectMask, VkImageLayout old_image_layout,
-                                  VkImageLayout new_image_layout, VkAccessFlagBits srcAccessMask, VkPipelineStageFlags src_stages,
-                                  VkPipelineStageFlags dest_stages) {
+                                  /* VkImageLayout new_image_layout, VkAccessFlagBits srcAccessMask, VkPipelineStageFlags src_stages,
+                                  VkPipelineStageFlags dest_stages) {*/
+                                  VkImageLayout new_image_layout, VkAccessFlags2 srcAccessMask, VkPipelineStageFlags2 src_stages,
+                                  VkPipelineStageFlags2 dest_stages) {
     assert(demo->cmd);
 
-    VkImageMemoryBarrier image_memory_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    /* VkImageMemoryBarrier image_memory_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                                                  .pNext = NULL,
                                                  .srcAccessMask = srcAccessMask,
                                                  .dstAccessMask = 0,
@@ -694,32 +718,51 @@ static void demo_set_image_layout(struct demo *demo, VkImage image, VkImageAspec
                                                  .oldLayout = old_image_layout,
                                                  .newLayout = new_image_layout,
                                                  .image = image,
-                                                 .subresourceRange = {aspectMask, 0, 1, 0, 1}};
+                                                 .subresourceRange = {aspectMask, 0, 1, 0, 1}};*/
+
+    VkImageMemoryBarrier2 image_memory_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                                  .pNext = NULL,
+                                                  .srcStageMask = src_stages,
+                                                  .srcAccessMask = srcAccessMask,
+                                                  .dstStageMask = dest_stages,
+                                                  .dstAccessMask = 0,
+                                                  .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                  .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                  .oldLayout = old_image_layout,
+                                                  .newLayout = new_image_layout,
+                                                  .image = image,
+                                                  .subresourceRange = {aspectMask, 0, 1, 0, 1}};
 
     switch (new_image_layout) {
         case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
             /* Make sure anything that was copying from this image has completed */
-            image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            // image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            image_memory_barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
             break;
 
         case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-            image_memory_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            // image_memory_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            image_memory_barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
             break;
 
         case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-            image_memory_barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            // image_memory_barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            image_memory_barrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             break;
 
         case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-            image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+            // image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+            image_memory_barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT;
             break;
 
         case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-            image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            // image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            image_memory_barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
             break;
 
         case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
-            image_memory_barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            // image_memory_barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            image_memory_barrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
             break;
 
         default:
@@ -727,9 +770,20 @@ static void demo_set_image_layout(struct demo *demo, VkImage image, VkImageAspec
             break;
     }
 
-    VkImageMemoryBarrier *pmemory_barrier = &image_memory_barrier;
+    /* VkImageMemoryBarrier *pmemory_barrier = &image_memory_barrier;
 
-    vkCmdPipelineBarrier(demo->cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL, 1, pmemory_barrier);
+    vkCmdPipelineBarrier(demo->cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL, 1, pmemory_barrier);*/
+    VkDependencyInfo dependency_info;
+    dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependency_info.pNext = NULL;
+    dependency_info.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    dependency_info.memoryBarrierCount = 0;
+    dependency_info.pMemoryBarriers = NULL;
+    dependency_info.bufferMemoryBarrierCount = 0;
+    dependency_info.pBufferMemoryBarriers = NULL;
+    dependency_info.imageMemoryBarrierCount = 1;
+    dependency_info.pImageMemoryBarriers = &image_memory_barrier;
+    demo->CmdPipelineBarrier2KHR(demo->cmd, &dependency_info);
 }
 
 static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
@@ -852,7 +906,7 @@ static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
         // to transfer from present queue family back to graphics queue family at
         // the start of the next frame because we don't care about the image's
         // contents at that point.
-        VkImageMemoryBarrier image_ownership_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        /* VkImageMemoryBarrier image_ownership_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                                                         .pNext = NULL,
                                                         .srcAccessMask = 0,
                                                         .dstAccessMask = 0,
@@ -864,7 +918,31 @@ static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
                                                         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
 
         vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0,
-                             NULL, 1, &image_ownership_barrier);
+                             NULL, 1, &image_ownership_barrier); */
+        VkImageMemoryBarrier2 image_ownership_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                                         .pNext = NULL,
+                                                         .srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+                                                         .srcAccessMask = 0,
+                                                         .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+                                                         .dstAccessMask = 0,
+                                                         .oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                                                         .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                                                         .srcQueueFamilyIndex = demo->graphics_queue_family_index,
+                                                         .dstQueueFamilyIndex = demo->present_queue_family_index,
+                                                         .image = demo->swapchain_image_resources[demo->current_buffer].image,
+                                                         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+
+        VkDependencyInfo dependency_info;
+        dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency_info.pNext = NULL;
+        dependency_info.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        dependency_info.memoryBarrierCount = 0;
+        dependency_info.pMemoryBarriers = NULL;
+        dependency_info.bufferMemoryBarrierCount = 0;
+        dependency_info.pBufferMemoryBarriers = NULL;
+        dependency_info.imageMemoryBarrierCount = 1;
+        dependency_info.pImageMemoryBarriers = &image_ownership_barrier;
+        demo->CmdPipelineBarrier2KHR(cmd_buf, &dependency_info);
     }
     if (demo->validate) {
         demo->CmdEndDebugUtilsLabelEXT(cmd_buf);
@@ -885,7 +963,7 @@ void demo_build_image_ownership_cmd(struct demo *demo, int i) {
     err = vkBeginCommandBuffer(demo->swapchain_image_resources[i].graphics_to_present_cmd, &cmd_buf_info);
     assert(!err);
 
-    VkImageMemoryBarrier image_ownership_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    /* VkImageMemoryBarrier image_ownership_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                                                     .pNext = NULL,
                                                     .srcAccessMask = 0,
                                                     .dstAccessMask = 0,
@@ -897,7 +975,32 @@ void demo_build_image_ownership_cmd(struct demo *demo, int i) {
                                                     .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
 
     vkCmdPipelineBarrier(demo->swapchain_image_resources[i].graphics_to_present_cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 1, &image_ownership_barrier);
+                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 1, &image_ownership_barrier); */
+    VkImageMemoryBarrier2 image_ownership_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                                                     .pNext = NULL,
+                                                     .srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+                                                     .srcAccessMask = 0,
+                                                     .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+                                                     .dstAccessMask = 0,
+                                                     .oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                                                     .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                                                     .srcQueueFamilyIndex = demo->graphics_queue_family_index,
+                                                     .dstQueueFamilyIndex = demo->present_queue_family_index,
+                                                     .image = demo->swapchain_image_resources[i].image,
+                                                     .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+
+    VkDependencyInfo dependency_info;
+    dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependency_info.pNext = NULL;
+    dependency_info.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    dependency_info.memoryBarrierCount = 0;
+    dependency_info.pMemoryBarriers = NULL;
+    dependency_info.bufferMemoryBarrierCount = 0;
+    dependency_info.pBufferMemoryBarriers = NULL;
+    dependency_info.imageMemoryBarrierCount = 1;
+    dependency_info.pImageMemoryBarriers = &image_ownership_barrier;
+    demo->CmdPipelineBarrier2KHR(demo->swapchain_image_resources[i].graphics_to_present_cmd, &dependency_info);
+
     err = vkEndCommandBuffer(demo->swapchain_image_resources[i].graphics_to_present_cmd);
     assert(!err);
 }
@@ -1081,7 +1184,8 @@ static void demo_draw(struct demo *demo) {
     // that the image won't be rendered to until the presentation
     // engine has fully released ownership to the application, and it is
     // okay to render to the image.
-    VkPipelineStageFlags pipe_stage_flags;
+
+    /*VkPipelineStageFlags pipe_stage_flags;
     VkSubmitInfo submit_info;
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.pNext = NULL;
@@ -1093,7 +1197,38 @@ static void demo_draw(struct demo *demo) {
     submit_info.pCommandBuffers = &demo->swapchain_image_resources[demo->current_buffer].cmd;
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = &demo->draw_complete_semaphores[demo->frame_index];
-    err = vkQueueSubmit(demo->graphics_queue, 1, &submit_info, demo->fences[demo->frame_index]);
+    err = vkQueueSubmit(demo->graphics_queue, 1, &submit_info, demo->fences[demo->frame_index]);*/
+
+    VkPipelineStageFlags2 pipe_stage_flags;
+    pipe_stage_flags = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSemaphoreSubmitInfo wait_semaphore_info = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                                                 .pNext = NULL,
+                                                 .semaphore = demo->image_acquired_semaphores[demo->frame_index],
+                                                 .value = 0,
+                                                 .stageMask = pipe_stage_flags,
+                                                 .deviceIndex = 0};
+    VkSemaphoreSubmitInfo signal_semaphore_info = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                                                   .pNext = NULL,
+                                                   .semaphore = demo->draw_complete_semaphores[demo->frame_index],
+                                                   .value = 0,
+                                                   .stageMask = pipe_stage_flags,
+                                                   .deviceIndex = 0};
+    VkCommandBufferSubmitInfo command_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .commandBuffer = demo->swapchain_image_resources[demo->current_buffer].cmd,
+    };
+
+    VkSubmitInfo2 submit_info;
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submit_info.pNext = NULL;
+    submit_info.flags = 0;
+    submit_info.waitSemaphoreInfoCount = 1;
+    submit_info.pWaitSemaphoreInfos = &wait_semaphore_info;
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &command_info;
+    submit_info.signalSemaphoreInfoCount = 1;
+    submit_info.pSignalSemaphoreInfos = &signal_semaphore_info;
+    err = demo->QueueSubmit2KHR(demo->graphics_queue, 1, &submit_info, demo->fences[demo->frame_index]);
     assert(!err);
 
     if (demo->separate_present_queue) {
@@ -1101,14 +1236,29 @@ static void demo_draw(struct demo *demo) {
         // present queue before presenting, waiting for the draw complete
         // semaphore and signalling the ownership released semaphore when finished
         VkFence nullFence = VK_NULL_HANDLE;
-        pipe_stage_flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        /* pipe_stage_flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         submit_info.waitSemaphoreCount = 1;
         submit_info.pWaitSemaphores = &demo->draw_complete_semaphores[demo->frame_index];
         submit_info.commandBufferCount = 1;
         submit_info.pCommandBuffers = &demo->swapchain_image_resources[demo->current_buffer].graphics_to_present_cmd;
         submit_info.signalSemaphoreCount = 1;
         submit_info.pSignalSemaphores = &demo->image_ownership_semaphores[demo->frame_index];
-        err = vkQueueSubmit(demo->present_queue, 1, &submit_info, nullFence);
+        err = vkQueueSubmit(demo->present_queue, 1, &submit_info, nullFence);*/
+
+        pipe_stage_flags = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        wait_semaphore_info.semaphore = demo->draw_complete_semaphores[demo->frame_index];
+        wait_semaphore_info.stageMask = pipe_stage_flags;
+        signal_semaphore_info.semaphore = demo->image_ownership_semaphores[demo->frame_index];
+        signal_semaphore_info.stageMask = pipe_stage_flags;
+        command_info.commandBuffer = demo->swapchain_image_resources[demo->current_buffer]
+                                         .graphics_to_present_cmd;
+        submit_info.waitSemaphoreInfoCount = 1;
+        submit_info.pWaitSemaphoreInfos = &wait_semaphore_info;
+        submit_info.commandBufferInfoCount = 1;
+        submit_info.pCommandBufferInfos = &command_info;
+        submit_info.signalSemaphoreInfoCount = 1;
+        submit_info.pSignalSemaphoreInfos = &signal_semaphore_info;
+        err = demo->QueueSubmit2KHR(demo->present_queue, 1, &submit_info, nullFence);
         assert(!err);
     }
 
@@ -1704,8 +1854,10 @@ static void demo_prepare_textures(struct demo *demo) {
             // Nothing in the pipeline needs to be complete to start, and don't allow fragment
             // shader to run until layout transition completes
             demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_PREINITIALIZED,
-                                  demo->textures[i].imageLayout, 0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+                                  /* demo->textures[i].imageLayout, 0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT); */
+                                  demo->textures[i].imageLayout, 0, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                                  VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
             demo->staging_texture.image = 0;
         } else if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) {
             /* Must use staging buffer to copy linear texture to optimized */
@@ -1718,8 +1870,10 @@ static void demo_prepare_textures(struct demo *demo) {
                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
             demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_PREINITIALIZED,
-                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                  VK_PIPELINE_STAGE_TRANSFER_BIT);
+                                  /* VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                  VK_PIPELINE_STAGE_TRANSFER_BIT); */
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                                  VK_PIPELINE_STAGE_2_TRANSFER_BIT);
 
             VkBufferImageCopy copy_region = {
                 .bufferOffset = 0,
@@ -1734,8 +1888,10 @@ static void demo_prepare_textures(struct demo *demo) {
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
             demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                  demo->textures[i].imageLayout, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+                                  /* demo->textures[i].imageLayout, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT); */
+                                  demo->textures[i].imageLayout, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                                  VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
 
         } else {
             /* Can't support VK_FORMAT_R8G8B8A8_UNORM !? */
@@ -3322,7 +3478,7 @@ static void demo_init_vk(struct demo *demo) {
         .applicationVersion = 0,
         .pEngineName = APP_SHORT_NAME,
         .engineVersion = 0,
-        .apiVersion = VK_API_VERSION_1_0,
+        .apiVersion = VK_API_VERSION_1_2,
     };
     VkInstanceCreateInfo inst_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -3510,6 +3666,7 @@ static void demo_init_vk(struct demo *demo) {
                 DbgMsg("VK_GOOGLE_display_timing extension NOT AVAILABLE\n");
             }
         }
+        demo->extension_names[demo->enabled_extension_count++] = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME;
 
         free(device_extensions);
     }
@@ -3557,6 +3714,17 @@ static void demo_init_vk(struct demo *demo) {
                 break;
         }
     }
+    demo->CmdSetEvent2KHR = (PFN_vkCmdSetEvent2KHR)vkGetInstanceProcAddr(demo->inst, "vkCmdSetEvent2KHR");
+    demo->CmdResetEvent2KHR = (PFN_vkCmdResetEvent2KHR)vkGetInstanceProcAddr(demo->inst, "vkCmdResetEvent2KHR");
+    demo->CmdWaitEvents2KHR = (PFN_vkCmdWaitEvents2KHR)vkGetInstanceProcAddr(demo->inst, "vkCmdWaitEvents2KHR");
+    demo->CmdPipelineBarrier2KHR = (PFN_vkCmdPipelineBarrier2KHR)vkGetInstanceProcAddr(demo->inst, "vkCmdPipelineBarrier2KHR");
+    demo->CmdWriteTimestamp2KHR = (PFN_vkCmdWriteTimestamp2KHR)vkGetInstanceProcAddr(demo->inst, "vkCmdWriteTimestamp2KHR");
+    demo->QueueSubmit2KHR = (PFN_vkQueueSubmit2KHR)vkGetInstanceProcAddr(demo->inst, "vkQueueSubmit2KHR");
+    demo->CmdWriteBufferMarker2AMD =
+        (PFN_vkCmdWriteBufferMarker2AMD)vkGetInstanceProcAddr(demo->inst, "vkCmdWriteBufferMarker2AMD");
+    demo->GetQueueCheckpointData2NV =
+        (PFN_vkGetQueueCheckpointData2NV)vkGetInstanceProcAddr(demo->inst, "vkGetQueueCheckpointData2NV");
+
     vkGetPhysicalDeviceProperties(demo->gpu, &demo->gpu_props);
 
     /* Call with NULL data to get count */
@@ -3610,6 +3778,12 @@ static void demo_create_device(struct demo *demo) {
         queues[1].flags = 0;
         device.queueCreateInfoCount = 2;
     }
+    VkPhysicalDeviceSynchronization2Features feature_sync2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+        .synchronization2 = VK_TRUE,
+    };
+
+    device.pNext = &feature_sync2;
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
 }
@@ -3751,6 +3925,7 @@ static void demo_init_vk_swapchain(struct demo *demo) {
     demo->graphics_queue_family_index = graphicsQueueFamilyIndex;
     demo->present_queue_family_index = presentQueueFamilyIndex;
     demo->separate_present_queue = (demo->graphics_queue_family_index != demo->present_queue_family_index);
+    // demo->separate_present_queue = false;
     free(supportsPresent);
 
     demo_create_device(demo);
@@ -3986,6 +4161,7 @@ static void demo_init(struct demo *demo, int argc, char **argv) {
     demo->gpu_number = -1;
     demo->width = 500;
     demo->height = 500;
+    // demo->validate = true;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--use_staging") == 0) {
