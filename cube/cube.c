@@ -390,6 +390,7 @@ struct demo {
     VkSemaphore image_acquired_semaphores[FRAME_LAG];
     VkSemaphore draw_complete_semaphores[FRAME_LAG];
     VkSemaphore image_ownership_semaphores[FRAME_LAG];
+    VkSemaphore timeline_semaphores[FRAME_LAG];
     VkPhysicalDeviceProperties gpu_props;
     VkQueueFamilyProperties *queue_props;
     VkPhysicalDeviceMemoryProperties memory_properties;
@@ -480,6 +481,7 @@ struct demo {
     PFN_vkQueueSubmit2KHR QueueSubmit2KHR;
     PFN_vkCmdWriteBufferMarker2AMD CmdWriteBufferMarker2AMD;
     PFN_vkGetQueueCheckpointData2NV GetQueueCheckpointData2NV;
+    PFN_vkGetSemaphoreCounterValue GetSemaphoreCounterValue;
     VkDebugUtilsMessengerEXT dbg_messenger;
 
     uint32_t current_buffer;
@@ -1199,6 +1201,8 @@ static void demo_draw(struct demo *demo) {
     submit_info.pSignalSemaphores = &demo->draw_complete_semaphores[demo->frame_index];
     err = vkQueueSubmit(demo->graphics_queue, 1, &submit_info, demo->fences[demo->frame_index]);*/
 
+    uint64_t timeline_semaphore_value = 0;
+    err = demo->GetSemaphoreCounterValue(demo->device, demo->timeline_semaphores[demo->frame_index], &timeline_semaphore_value);
     VkPipelineStageFlags2 pipe_stage_flags;
     pipe_stage_flags = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSemaphoreSubmitInfo wait_semaphore_info = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
@@ -1209,8 +1213,8 @@ static void demo_draw(struct demo *demo) {
                                                  .deviceIndex = 0};
     VkSemaphoreSubmitInfo signal_semaphore_info = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                                                    .pNext = NULL,
-                                                   .semaphore = demo->draw_complete_semaphores[demo->frame_index],
-                                                   .value = 0,
+                                                   .semaphore = demo->timeline_semaphores[demo->frame_index],
+                                                   .value = ++timeline_semaphore_value,
                                                    .stageMask = pipe_stage_flags,
                                                    .deviceIndex = 0};
     VkCommandBufferSubmitInfo command_info = {
@@ -1229,6 +1233,13 @@ static void demo_draw(struct demo *demo) {
     submit_info.signalSemaphoreInfoCount = 1;
     submit_info.pSignalSemaphoreInfos = &signal_semaphore_info;
     err = demo->QueueSubmit2KHR(demo->graphics_queue, 1, &submit_info, demo->fences[demo->frame_index]);
+    assert(!err);
+
+    wait_semaphore_info.semaphore = demo->timeline_semaphores[demo->frame_index];
+    wait_semaphore_info.value = timeline_semaphore_value; // <= timeline_semaphore_value: success. > timeline_semaphore_value: fail
+    signal_semaphore_info.semaphore = demo->draw_complete_semaphores[demo->frame_index];
+    signal_semaphore_info.value = 0;
+    err = demo->QueueSubmit2KHR(demo->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
     assert(!err);
 
     if (demo->separate_present_queue) {
@@ -2500,6 +2511,7 @@ static void demo_cleanup(struct demo *demo) {
         vkDestroyFence(demo->device, demo->fences[i], NULL);
         vkDestroySemaphore(demo->device, demo->image_acquired_semaphores[i], NULL);
         vkDestroySemaphore(demo->device, demo->draw_complete_semaphores[i], NULL);
+        vkDestroySemaphore(demo->device, demo->timeline_semaphores[i], NULL);
         if (demo->separate_present_queue) {
             vkDestroySemaphore(demo->device, demo->image_ownership_semaphores[i], NULL);
         }
@@ -3724,6 +3736,8 @@ static void demo_init_vk(struct demo *demo) {
         (PFN_vkCmdWriteBufferMarker2AMD)vkGetInstanceProcAddr(demo->inst, "vkCmdWriteBufferMarker2AMD");
     demo->GetQueueCheckpointData2NV =
         (PFN_vkGetQueueCheckpointData2NV)vkGetInstanceProcAddr(demo->inst, "vkGetQueueCheckpointData2NV");
+    demo->GetSemaphoreCounterValue =
+        (PFN_vkGetSemaphoreCounterValue)vkGetInstanceProcAddr(demo->inst, "vkGetSemaphoreCounterValue");
 
     vkGetPhysicalDeviceProperties(demo->gpu, &demo->gpu_props);
 
@@ -3782,8 +3796,13 @@ static void demo_create_device(struct demo *demo) {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
         .synchronization2 = VK_TRUE,
     };
+    VkPhysicalDeviceTimelineSemaphoreFeatures feature_timeline_semaphore = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+        .pNext = &feature_sync2,
+        .timelineSemaphore = VK_TRUE,
+    };
 
-    device.pNext = &feature_sync2;
+    device.pNext = &feature_timeline_semaphore;
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
 }
@@ -3971,6 +3990,19 @@ static void demo_init_vk_swapchain(struct demo *demo) {
         .flags = 0,
     };
 
+    VkSemaphoreTypeCreateInfo semaphore_type_ci = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .pNext = NULL,
+        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+        .initialValue = 0,
+    };
+
+    VkSemaphoreCreateInfo semaphore_timeline_ci = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &semaphore_type_ci,
+        .flags = 0,
+    };
+
     // Create fences that we can use to throttle if we get too far
     // ahead of the image presents
     VkFenceCreateInfo fence_ci = {
@@ -3983,6 +4015,9 @@ static void demo_init_vk_swapchain(struct demo *demo) {
         assert(!err);
 
         err = vkCreateSemaphore(demo->device, &semaphoreCreateInfo, NULL, &demo->draw_complete_semaphores[i]);
+        assert(!err);
+
+        err = vkCreateSemaphore(demo->device, &semaphore_timeline_ci, NULL, &demo->timeline_semaphores[i]);
         assert(!err);
 
         if (demo->separate_present_queue) {
