@@ -3610,6 +3610,25 @@ static void demo_create_device(struct demo *demo) {
         queues[1].flags = 0;
         device.queueCreateInfoCount = 2;
     }
+
+    VkDeviceQueueGlobalPriorityCreateInfoKHR global_priority_ci;
+    global_priority_ci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR;
+    global_priority_ci.pNext = NULL;
+    global_priority_ci.globalPriority = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR;
+    queues[0].pNext = &global_priority_ci;
+
+    VkPhysicalDeviceGlobalPriorityQueryFeaturesKHR global_priority_feature;
+    global_priority_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES_KHR;
+    global_priority_feature.pNext = NULL;
+    global_priority_feature.globalPriorityQuery = VK_TRUE;
+    device.pNext = &global_priority_feature;
+
+    VkQueueFamilyGlobalPriorityPropertiesKHR global_priority_props;
+    global_priority_props.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR;
+    global_priority_props.pNext = NULL;
+    global_priority_props.priorityCount = 1;
+    global_priority_props.priorities[0] = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR;
+
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
 }
