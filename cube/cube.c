@@ -414,6 +414,8 @@ struct demo {
     PFN_vkQueuePresentKHR fpQueuePresentKHR;
     PFN_vkGetRefreshCycleDurationGOOGLE fpGetRefreshCycleDurationGOOGLE;
     PFN_vkGetPastPresentationTimingGOOGLE fpGetPastPresentationTimingGOOGLE;
+    PFN_vkCmdBeginRendering fpCmdBeginRendering;
+    PFN_vkCmdEndRendering fpCmdEndRendering;
     uint32_t swapchainImageCount;
     VkSwapchainKHR swapchain;
     SwapchainImageResources *swapchain_image_resources;
@@ -783,7 +785,53 @@ static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
     }
 
     assert(!err);
-    vkCmdBeginRenderPass(cmd_buf, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+
+    static int image_index = 0;
+    image_index = image_index % 3;
+    VkRenderingAttachmentInfo color_attachment = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = NULL,
+        .imageView = demo->swapchain_image_resources[image_index].view,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .resolveMode = VK_RESOLVE_MODE_NONE,
+        .resolveImageView = VK_NULL_HANDLE,
+        .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = clear_values[0],
+    };
+    ++image_index;
+
+    VkRenderingAttachmentInfo depth_attachment = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = NULL,
+        .imageView = demo->depth.view,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .resolveMode = VK_RESOLVE_MODE_NONE,
+        .resolveImageView = VK_NULL_HANDLE,
+        .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue = clear_values[1],
+    };
+
+    VkRenderingInfo rendering_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = NULL,
+        .flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT,
+        .renderArea.offset.x = 0,
+        .renderArea.offset.y = 0,
+        .renderArea.extent.width = demo->width,
+        .renderArea.extent.height = demo->height,
+        .layerCount = 1,
+        .viewMask = 0,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_attachment,
+        .pDepthAttachment = &depth_attachment,
+        .pStencilAttachment = NULL,
+    };
+    demo->fpCmdBeginRendering(cmd_buf, &rendering_info);
+    // vkCmdBeginRenderPass(cmd_buf, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
 
     if (demo->validate) {
         label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
@@ -841,7 +889,8 @@ static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
 
     // Note that ending the renderpass changes the image's layout from
     // COLOR_ATTACHMENT_OPTIMAL to PRESENT_SRC_KHR
-    vkCmdEndRenderPass(cmd_buf);
+    // vkCmdEndRenderPass(cmd_buf);
+    demo->fpCmdEndRendering(cmd_buf);
     if (demo->validate) {
         demo->CmdEndDebugUtilsLabelEXT(cmd_buf);
     }
@@ -2132,6 +2181,18 @@ static void demo_prepare_pipeline(struct demo *demo) {
 
     pipeline.renderPass = demo->render_pass;
 
+    VkFormat color_attachment_format = demo->format;
+    VkPipelineRenderingCreateInfo rendering_ci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .pNext = NULL,
+        .viewMask = 0,
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &color_attachment_format,
+        .depthAttachmentFormat = demo->depth.format,
+        .stencilAttachmentFormat = VK_FORMAT_UNDEFINED,
+    };
+    pipeline.pNext = &rendering_ci;
+
     err = vkCreateGraphicsPipelines(demo->device, demo->pipelineCache, 1, &pipeline, NULL, &demo->pipeline);
     assert(!err);
 
@@ -3322,7 +3383,7 @@ static void demo_init_vk(struct demo *demo) {
         .applicationVersion = 0,
         .pEngineName = APP_SHORT_NAME,
         .engineVersion = 0,
-        .apiVersion = VK_API_VERSION_1_0,
+        .apiVersion = VK_API_VERSION_1_3,
     };
     VkInstanceCreateInfo inst_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -3610,6 +3671,14 @@ static void demo_create_device(struct demo *demo) {
         queues[1].flags = 0;
         device.queueCreateInfoCount = 2;
     }
+
+    VkPhysicalDeviceDynamicRenderingFeatures rendering_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+        .pNext = NULL,
+        .dynamicRendering = VK_TRUE,
+    };
+    device.pNext = &rendering_features;
+
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
 }
@@ -3764,6 +3833,8 @@ static void demo_init_vk_swapchain(struct demo *demo) {
         GET_DEVICE_PROC_ADDR(demo->device, GetRefreshCycleDurationGOOGLE);
         GET_DEVICE_PROC_ADDR(demo->device, GetPastPresentationTimingGOOGLE);
     }
+    GET_DEVICE_PROC_ADDR(demo->device, CmdBeginRendering);
+    GET_DEVICE_PROC_ADDR(demo->device, CmdEndRendering);
 
     vkGetDeviceQueue(demo->device, demo->graphics_queue_family_index, 0, &demo->graphics_queue);
 
