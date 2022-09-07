@@ -3470,6 +3470,11 @@ static void demo_init_vk(struct demo *demo) {
             if (!strcmp("VK_KHR_portability_subset", device_extensions[i].extensionName)) {
                 demo->extension_names[demo->enabled_extension_count++] = "VK_KHR_portability_subset";
             }
+            if (!strcmp(VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME, device_extensions[i].extensionName)) {
+                demo->extension_names[demo->enabled_extension_count++] = VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME;
+            } else {
+                assert(0);
+            }
             assert(demo->enabled_extension_count < 64);
         }
 
