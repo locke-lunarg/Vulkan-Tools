@@ -393,6 +393,7 @@ struct demo {
     VkPhysicalDeviceProperties gpu_props;
     VkQueueFamilyProperties *queue_props;
     VkPhysicalDeviceMemoryProperties memory_properties;
+    VkPrivateDataSlot private_data_slot;
 
     uint32_t enabled_extension_count;
     uint32_t enabled_layer_count;
@@ -414,6 +415,10 @@ struct demo {
     PFN_vkQueuePresentKHR fpQueuePresentKHR;
     PFN_vkGetRefreshCycleDurationGOOGLE fpGetRefreshCycleDurationGOOGLE;
     PFN_vkGetPastPresentationTimingGOOGLE fpGetPastPresentationTimingGOOGLE;
+    PFN_vkCreatePrivateDataSlot fpCreatePrivateDataSlot;
+    PFN_vkSetPrivateData fpSetPrivateData;
+    PFN_vkGetPrivateData fpGetPrivateData;
+    PFN_vkDestroyPrivateDataSlot fpDestroyPrivateDataSlot;
     uint32_t swapchainImageCount;
     VkSwapchainKHR swapchain;
     SwapchainImageResources *swapchain_image_resources;
@@ -1034,6 +1039,9 @@ void DemoUpdateTargetIPD(struct demo *demo) {
 }
 
 static void demo_draw(struct demo *demo) {
+    uint64_t priavte_data = 0;
+    demo->fpGetPrivateData(demo->device, VK_OBJECT_TYPE_DEVICE, (uint64_t)(demo->device), demo->private_data_slot, &priavte_data);
+
     VkResult U_ASSERT_ONLY err;
 
     // Ensure no more than FRAME_LAG renderings are outstanding
@@ -3322,7 +3330,7 @@ static void demo_init_vk(struct demo *demo) {
         .applicationVersion = 0,
         .pEngineName = APP_SHORT_NAME,
         .engineVersion = 0,
-        .apiVersion = VK_API_VERSION_1_0,
+        .apiVersion = VK_API_VERSION_1_3,
     };
     VkInstanceCreateInfo inst_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -3610,7 +3618,41 @@ static void demo_create_device(struct demo *demo) {
         queues[1].flags = 0;
         device.queueCreateInfoCount = 2;
     }
+
+    VkPhysicalDevicePrivateDataFeatures physical_device_private_data_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES,
+        .pNext = NULL,
+        .privateData = VK_TRUE,
+    };
+
+    VkDevicePrivateDataCreateInfo device_private_data_ci = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO,
+        .pNext = NULL,
+        .privateDataSlotRequestCount = 1,
+    };
+
+    device.pNext = &physical_device_private_data_features;
+    physical_device_private_data_features.pNext = &device_private_data_ci;
+
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
+    assert(!err);
+
+    GET_DEVICE_PROC_ADDR(demo->device, CreatePrivateDataSlot);
+    GET_DEVICE_PROC_ADDR(demo->device, DestroyPrivateDataSlot);
+    GET_DEVICE_PROC_ADDR(demo->device, SetPrivateData);
+    GET_DEVICE_PROC_ADDR(demo->device, GetPrivateData);
+
+    VkPrivateDataSlotCreateInfo private_data_slot_ci = {
+        .sType = VK_STRUCTURE_TYPE_PRIVATE_DATA_SLOT_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+    };
+
+    err = demo->fpCreatePrivateDataSlot(demo->device, &private_data_slot_ci, NULL, &demo->private_data_slot);
+    assert(!err);
+
+    err =
+        demo->fpSetPrivateData(demo->device, VK_OBJECT_TYPE_DEVICE, (uint64_t)(demo->device), demo->private_data_slot, 1234567890);
     assert(!err);
 }
 
