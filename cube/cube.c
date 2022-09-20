@@ -2330,6 +2330,9 @@ static void demo_prepare(struct demo *demo) {
 
     demo->current_buffer = 0;
     demo->prepared = true;
+
+    // vkTrimCommandPool(demo->device, demo->present_cmd_pool, 0);
+    vkTrimCommandPool(demo->device, demo->cmd_pool, 0);
 }
 
 static void demo_cleanup(struct demo *demo) {
@@ -2494,6 +2497,9 @@ static void demo_run(struct demo *demo) {
 
     demo_draw(demo);
     demo->curFrame++;
+    //if (demo->curFrame == 20)
+    //    vkTrimCommandPool(demo->device, demo->cmd_pool, 0);
+
     if (demo->frameCount != INT32_MAX && demo->curFrame == demo->frameCount) {
         PostQuitMessage(validation_error);
     }
