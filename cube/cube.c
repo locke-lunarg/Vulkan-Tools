@@ -3322,7 +3322,7 @@ static void demo_init_vk(struct demo *demo) {
         .applicationVersion = 0,
         .pEngineName = APP_SHORT_NAME,
         .engineVersion = 0,
-        .apiVersion = VK_API_VERSION_1_0,
+        .apiVersion = VK_API_VERSION_1_1,
     };
     VkInstanceCreateInfo inst_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -3609,6 +3609,28 @@ static void demo_create_device(struct demo *demo) {
         queues[1].pQueuePriorities = queue_priorities;
         queues[1].flags = 0;
         device.queueCreateInfoCount = 2;
+    }
+
+    uint32_t gpu_group_count = 0;
+    err = vkEnumeratePhysicalDeviceGroups(demo->inst, &gpu_group_count, NULL);
+    assert(!err);
+
+    VkPhysicalDeviceGroupProperties *group_props = NULL;
+    if (gpu_group_count) {
+        group_props = malloc(sizeof(VkPhysicalDeviceGroupProperties) * gpu_group_count);
+        err = vkEnumeratePhysicalDeviceGroups(demo->inst, &gpu_group_count, group_props);
+        assert(!err);
+
+        VkPhysicalDeviceGroupProperties group_prop = group_props[0];
+
+        VkDeviceGroupDeviceCreateInfo group_device_ci = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO,
+            .pNext = NULL,
+            .physicalDeviceCount = group_prop.physicalDeviceCount,
+            .pPhysicalDevices = group_prop.physicalDevices,
+        };
+
+        device.pNext = &group_device_ci;
     }
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
