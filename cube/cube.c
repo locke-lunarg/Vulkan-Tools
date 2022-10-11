@@ -414,6 +414,13 @@ struct demo {
     PFN_vkQueuePresentKHR fpQueuePresentKHR;
     PFN_vkGetRefreshCycleDurationGOOGLE fpGetRefreshCycleDurationGOOGLE;
     PFN_vkGetPastPresentationTimingGOOGLE fpGetPastPresentationTimingGOOGLE;
+
+    PFN_vkAcquireProfilingLockKHR fpAcquireProfilingLockKHR;
+    PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR
+        fpEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR;
+    PFN_vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR fpGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR;
+    PFN_vkReleaseProfilingLockKHR fpReleaseProfilingLockKHR;
+
     uint32_t swapchainImageCount;
     VkSwapchainKHR swapchain;
     SwapchainImageResources *swapchain_image_resources;
@@ -423,6 +430,8 @@ struct demo {
 
     VkCommandPool cmd_pool;
     VkCommandPool present_cmd_pool;
+
+    VkQueryPool query_pool;
 
     struct {
         VkFormat format;
@@ -2243,6 +2252,40 @@ static void demo_prepare(struct demo *demo) {
     }
 
     VkResult U_ASSERT_ONLY err;
+
+    if (demo->query_pool == VK_NULL_HANDLE) {
+        uint32_t counter_count = 0;
+        demo->fpEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(demo->gpu, demo->graphics_queue_family_index,
+                                                                              &counter_count, NULL, NULL);
+
+        VkPerformanceCounterKHR *counters = malloc(sizeof(VkPerformanceCounterKHR) * counter_count);
+        VkPerformanceCounterDescriptionKHR *counter_descriptions =
+            malloc(sizeof(VkPerformanceCounterDescriptionKHR) * counter_count);
+        demo->fpEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(demo->gpu, demo->graphics_queue_family_index,
+                                                                              &counter_count, counters, counter_descriptions);
+
+        uint32_t counter_index = 0;
+        VkQueryPoolPerformanceCreateInfoKHR perf_query_info = {
+            .sType = VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_CREATE_INFO_KHR,
+            .pNext = NULL,
+            .queueFamilyIndex = demo->graphics_queue_family_index,
+            .counterIndexCount = 1,
+            .pCounterIndices = &counter_index,
+
+        };
+
+        const VkQueryPoolCreateInfo query_pool_info = {
+            .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0,
+            .queryType = VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR,
+            .queryCount = 128,
+            .pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT,
+        };
+        err = vkCreateQueryPool(demo->device, &query_pool_info, NULL, &demo->query_pool);
+        assert(!err);
+    }
+
     if (demo->cmd_pool == VK_NULL_HANDLE) {
         const VkCommandPoolCreateInfo cmd_pool_info = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -3470,6 +3513,9 @@ static void demo_init_vk(struct demo *demo) {
             if (!strcmp("VK_KHR_portability_subset", device_extensions[i].extensionName)) {
                 demo->extension_names[demo->enabled_extension_count++] = "VK_KHR_portability_subset";
             }
+            if (!strcmp("VK_KHR_performance_query", device_extensions[i].extensionName)) {
+                demo->extension_names[demo->enabled_extension_count++] = "VK_KHR_performance_query";
+            }
             assert(demo->enabled_extension_count < 64);
         }
 
@@ -3764,6 +3810,10 @@ static void demo_init_vk_swapchain(struct demo *demo) {
         GET_DEVICE_PROC_ADDR(demo->device, GetRefreshCycleDurationGOOGLE);
         GET_DEVICE_PROC_ADDR(demo->device, GetPastPresentationTimingGOOGLE);
     }
+    GET_DEVICE_PROC_ADDR(demo->device, AcquireProfilingLockKHR);
+    GET_DEVICE_PROC_ADDR(demo->device, EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR);
+    GET_DEVICE_PROC_ADDR(demo->device, GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR);
+    GET_DEVICE_PROC_ADDR(demo->device, ReleaseProfilingLockKHR);
 
     vkGetDeviceQueue(demo->device, demo->graphics_queue_family_index, 0, &demo->graphics_queue);
 
