@@ -414,6 +414,7 @@ struct demo {
     PFN_vkQueuePresentKHR fpQueuePresentKHR;
     PFN_vkGetRefreshCycleDurationGOOGLE fpGetRefreshCycleDurationGOOGLE;
     PFN_vkGetPastPresentationTimingGOOGLE fpGetPastPresentationTimingGOOGLE;
+    PFN_vkGetMicromapBuildSizesEXT fpGetMicromapBuildSizesEXT;
     uint32_t swapchainImageCount;
     VkSwapchainKHR swapchain;
     SwapchainImageResources *swapchain_image_resources;
@@ -3461,6 +3462,8 @@ static void demo_init_vk(struct demo *demo) {
         VkExtensionProperties *device_extensions = malloc(sizeof(VkExtensionProperties) * device_extension_count);
         err = vkEnumerateDeviceExtensionProperties(demo->gpu, NULL, &device_extension_count, device_extensions);
         assert(!err);
+        
+        bool opacity_micromap =false;
 
         for (uint32_t i = 0; i < device_extension_count; i++) {
             if (!strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, device_extensions[i].extensionName)) {
@@ -3469,6 +3472,10 @@ static void demo_init_vk(struct demo *demo) {
             }
             if (!strcmp("VK_KHR_portability_subset", device_extensions[i].extensionName)) {
                 demo->extension_names[demo->enabled_extension_count++] = "VK_KHR_portability_subset";
+            }
+            if (!strcmp("VK_EXT_opacity_micromap", device_extensions[i].extensionName)) {
+                demo->extension_names[demo->enabled_extension_count++] = "VK_EXT_opacity_micromap";
+                opacity_micromap=true;
             }
             assert(demo->enabled_extension_count < 64);
         }
@@ -3612,6 +3619,8 @@ static void demo_create_device(struct demo *demo) {
     }
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
+
+    PFN_vkGetMicromapBuildSizesEXT GetMicromapBuildSizesEXT;
 }
 
 static void demo_create_surface(struct demo *demo) {
