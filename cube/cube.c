@@ -1440,6 +1440,8 @@ static void demo_prepare_buffers(struct demo *demo) {
     if (NULL != presentModes) {
         free(presentModes);
     }
+
+    demo->fpSetLocalDimmingAMD(demo->device, demo->swapchain, VK_TRUE);
 }
 
 static void demo_prepare_depth(struct demo *demo) {
