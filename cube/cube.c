@@ -1786,6 +1786,8 @@ static void demo_prepare_textures(struct demo *demo) {
         view.image = demo->textures[i].image;
         err = vkCreateImageView(demo->device, &view, NULL, &demo->textures[i].view);
         assert(!err);
+
+        vkDestroyImageView(demo->device, demo->textures[i].view, NULL);
     }
 }
 
@@ -2184,6 +2186,7 @@ static void demo_prepare_descriptor_set(struct demo *demo) {
     for (unsigned int i = 0; i < DEMO_TEXTURE_COUNT; i++) {
         tex_descs[i].sampler = demo->textures[i].sampler;
         tex_descs[i].imageView = demo->textures[i].view;
+        // tex_descs[i].imageView = VK_NULL_HANDLE;
         tex_descs[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
@@ -2363,7 +2366,7 @@ static void demo_cleanup(struct demo *demo) {
         vkDestroyDescriptorSetLayout(demo->device, demo->desc_layout, NULL);
 
         for (i = 0; i < DEMO_TEXTURE_COUNT; i++) {
-            vkDestroyImageView(demo->device, demo->textures[i].view, NULL);
+            // vkDestroyImageView(demo->device, demo->textures[i].view, NULL);
             vkDestroyImage(demo->device, demo->textures[i].image, NULL);
             vkFreeMemory(demo->device, demo->textures[i].mem, NULL);
             vkDestroySampler(demo->device, demo->textures[i].sampler, NULL);
@@ -2456,7 +2459,7 @@ static void demo_resize(struct demo *demo) {
     vkDestroyDescriptorSetLayout(demo->device, demo->desc_layout, NULL);
 
     for (i = 0; i < DEMO_TEXTURE_COUNT; i++) {
-        vkDestroyImageView(demo->device, demo->textures[i].view, NULL);
+        // vkDestroyImageView(demo->device, demo->textures[i].view, NULL);
         vkDestroyImage(demo->device, demo->textures[i].image, NULL);
         vkFreeMemory(demo->device, demo->textures[i].mem, NULL);
         vkDestroySampler(demo->device, demo->textures[i].sampler, NULL);
