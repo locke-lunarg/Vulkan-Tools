@@ -414,6 +414,7 @@ struct demo {
     PFN_vkQueuePresentKHR fpQueuePresentKHR;
     PFN_vkGetRefreshCycleDurationGOOGLE fpGetRefreshCycleDurationGOOGLE;
     PFN_vkGetPastPresentationTimingGOOGLE fpGetPastPresentationTimingGOOGLE;
+    PFN_vkGetDeviceBufferMemoryRequirements fpGetDeviceBufferMemoryRequirements;
     uint32_t swapchainImageCount;
     VkSwapchainKHR swapchain;
     SwapchainImageResources *swapchain_image_resources;
@@ -1791,7 +1792,6 @@ static void demo_prepare_textures(struct demo *demo) {
 
 void demo_prepare_cube_data_buffers(struct demo *demo) {
     VkBufferCreateInfo buf_info;
-    VkMemoryRequirements mem_reqs;
     VkMemoryAllocateInfo mem_alloc;
     mat4x4 MVP, VP;
     VkResult U_ASSERT_ONLY err;
@@ -1817,22 +1817,35 @@ void demo_prepare_cube_data_buffers(struct demo *demo) {
     memset(&buf_info, 0, sizeof(buf_info));
     buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     buf_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    buf_info.flags = VK_BUFFER_CREATE_PROTECTED_BIT;
     buf_info.size = sizeof(data);
+
+    GET_DEVICE_PROC_ADDR(demo->device, GetDeviceBufferMemoryRequirements);
+
+    VkDeviceBufferMemoryRequirements buf_mem_reqs;
+    buf_mem_reqs.sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS;
+    buf_mem_reqs.pNext = NULL;
+    buf_mem_reqs.pCreateInfo = &buf_info;
+
+    VkMemoryRequirements2 mem_reqs;
+    mem_reqs.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+    mem_reqs.pNext = NULL;
+
+    demo->fpGetDeviceBufferMemoryRequirements(demo->device, &buf_mem_reqs, &mem_reqs);
 
     for (unsigned int i = 0; i < demo->swapchainImageCount; i++) {
         err = vkCreateBuffer(demo->device, &buf_info, NULL, &demo->swapchain_image_resources[i].uniform_buffer);
         assert(!err);
 
-        vkGetBufferMemoryRequirements(demo->device, demo->swapchain_image_resources[i].uniform_buffer, &mem_reqs);
-
         mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         mem_alloc.pNext = NULL;
-        mem_alloc.allocationSize = mem_reqs.size;
+        mem_alloc.allocationSize = mem_reqs.memoryRequirements.size;
         mem_alloc.memoryTypeIndex = 0;
 
-        pass = memory_type_from_properties(demo, mem_reqs.memoryTypeBits,
-                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                           &mem_alloc.memoryTypeIndex);
+        pass = memory_type_from_properties(
+            demo, mem_reqs.memoryRequirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_PROTECTED_BIT,
+            &mem_alloc.memoryTypeIndex);
         assert(pass);
 
         err = vkAllocateMemory(demo->device, &mem_alloc, NULL, &demo->swapchain_image_resources[i].uniform_memory);
@@ -3322,7 +3335,7 @@ static void demo_init_vk(struct demo *demo) {
         .applicationVersion = 0,
         .pEngineName = APP_SHORT_NAME,
         .engineVersion = 0,
-        .apiVersion = VK_API_VERSION_1_0,
+        .apiVersion = VK_API_VERSION_1_3,
     };
     VkInstanceCreateInfo inst_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -3439,7 +3452,7 @@ static void demo_init_vk(struct demo *demo) {
     }
 #endif
     assert(demo->gpu_number >= 0);
-    demo->gpu = physical_devices[demo->gpu_number];
+    demo->gpu = physical_devices[++demo->gpu_number];
     {
         VkPhysicalDeviceProperties physicalDeviceProperties;
         vkGetPhysicalDeviceProperties(demo->gpu, &physicalDeviceProperties);
@@ -3610,6 +3623,14 @@ static void demo_create_device(struct demo *demo) {
         queues[1].flags = 0;
         device.queueCreateInfoCount = 2;
     }
+
+    VkPhysicalDeviceVulkan11Features features11 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+        .pNext = NULL,
+        .protectedMemory = VK_TRUE,
+    };
+    device.pNext = &features11;
+
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
 }
