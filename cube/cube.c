@@ -2172,8 +2172,24 @@ static void demo_prepare_pipeline(struct demo *demo) {
     memset(&pipelineCache, 0, sizeof(pipelineCache));
     pipelineCache.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
 
+    FILE *cache_input = fopen("cache", "rb");
+    size_t cache_data_size_input = 0;
+    void *cache_data_input = NULL;
+    if (cache_input != NULL) {
+        fseek(cache_input, 0, SEEK_END);
+        cache_data_size_input = ftell(cache_input);
+        cache_data_input = malloc(cache_data_size_input * sizeof(uint8_t));
+        pipelineCache.initialDataSize = cache_data_size_input;
+        pipelineCache.pInitialData = cache_data_input;
+    }
+
     err = vkCreatePipelineCache(demo->device, &pipelineCache, NULL, &demo->pipelineCache);
     assert(!err);
+
+    if (cache_input != NULL) {
+        fclose(cache_input);
+        free(cache_data_input);
+    }
 
     pipeline.pVertexInputState = &vi;
     pipeline.pInputAssemblyState = &ia;
@@ -2196,8 +2212,22 @@ static void demo_prepare_pipeline(struct demo *demo) {
         pipeline.flags = 0;
         err = vkCreateGraphicsPipelines(demo->device, demo->pipelineCache, 1, &pipeline, NULL, &demo->pipeline);
     }
-
     assert(!err);
+
+    size_t cache_data_size_output;
+    err = vkGetPipelineCacheData(demo->device, demo->pipelineCache, &cache_data_size_output, 0);
+    assert(!err);
+
+    void *cache_data_output = malloc(cache_data_size_output * sizeof(uint8_t));
+    err = vkGetPipelineCacheData(demo->device, demo->pipelineCache, &cache_data_size_output, cache_data_output);
+    assert(!err);
+
+    FILE *cache_output = fopen("cache", "wb");
+    if (cache_output != NULL) {
+        fwrite(cache_data_output, 1, cache_data_size_output * sizeof(uint8_t), cache_output);
+        fclose(cache_output);
+    }
+    free(cache_data_output);
 
     vkDestroyShaderModule(demo->device, demo->frag_shader_module, NULL);
     vkDestroyShaderModule(demo->device, demo->vert_shader_module, NULL);
