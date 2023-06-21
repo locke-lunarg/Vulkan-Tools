@@ -2100,6 +2100,7 @@ static void demo_prepare_pipeline(struct demo *demo) {
     memset(&pipeline, 0, sizeof(pipeline));
     pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipeline.layout = demo->pipeline_layout;
+    pipeline.flags = VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT;
 
     memset(&vi, 0, sizeof(vi));
     vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -2189,6 +2190,13 @@ static void demo_prepare_pipeline(struct demo *demo) {
     pipeline.renderPass = demo->render_pass;
 
     err = vkCreateGraphicsPipelines(demo->device, demo->pipelineCache, 1, &pipeline, NULL, &demo->pipeline);
+
+    if (err == VK_PIPELINE_COMPILE_REQUIRED_EXT) {
+        DbgMsg("VK_PIPELINE_COMPILE_REQUIRED_EXT happened\n");
+        pipeline.flags = 0;
+        err = vkCreateGraphicsPipelines(demo->device, demo->pipelineCache, 1, &pipeline, NULL, &demo->pipeline);
+    }
+
     assert(!err);
 
     vkDestroyShaderModule(demo->device, demo->frag_shader_module, NULL);
@@ -3533,6 +3541,10 @@ static void demo_init_vk(struct demo *demo) {
             if (!strcmp("VK_KHR_portability_subset", device_extensions[i].extensionName)) {
                 demo->extension_names[demo->enabled_extension_count++] = "VK_KHR_portability_subset";
             }
+            if (!strcmp("VK_EXT_pipeline_creation_cache_control", device_extensions[i].extensionName)) {
+                demo->extension_names[demo->enabled_extension_count++] = "VK_EXT_pipeline_creation_cache_control";
+                DbgMsg("VK_EXT_pipeline_creation_cache_control extension enabled\n");
+            }
             assert(demo->enabled_extension_count < 64);
         }
 
@@ -3632,8 +3644,16 @@ static void demo_init_vk(struct demo *demo) {
     // Query fine-grained feature support for this device.
     //  If app has specific feature requirements it should check supported
     //  features based on this query
-    VkPhysicalDeviceFeatures physDevFeatures;
-    vkGetPhysicalDeviceFeatures(demo->gpu, &physDevFeatures);
+    // VkPhysicalDeviceFeatures physDevFeatures;
+    // vkGetPhysicalDeviceFeatures(demo->gpu, &physDevFeatures);
+
+    VkPhysicalDevicePipelineCreationCacheControlFeatures pipeline_creation_cache_control_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES};
+
+    VkPhysicalDeviceFeatures2 physDevFeatures = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                                 .pNext = &pipeline_creation_cache_control_features};
+
+    vkGetPhysicalDeviceFeatures2(demo->gpu, &physDevFeatures);
 
     GET_INSTANCE_PROC_ADDR(demo->inst, GetPhysicalDeviceSurfaceSupportKHR);
     GET_INSTANCE_PROC_ADDR(demo->inst, GetPhysicalDeviceSurfaceCapabilitiesKHR);
@@ -3673,6 +3693,12 @@ static void demo_create_device(struct demo *demo) {
         queues[1].flags = 0;
         device.queueCreateInfoCount = 2;
     }
+    VkPhysicalDevicePipelineCreationCacheControlFeatures pipeline_creation_cache_control_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
+        .pipelineCreationCacheControl = VK_TRUE};
+
+    device.pNext = &pipeline_creation_cache_control_features;
+
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
 }
