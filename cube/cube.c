@@ -414,6 +414,7 @@ struct demo {
     PFN_vkQueuePresentKHR fpQueuePresentKHR;
     PFN_vkGetRefreshCycleDurationGOOGLE fpGetRefreshCycleDurationGOOGLE;
     PFN_vkGetPastPresentationTimingGOOGLE fpGetPastPresentationTimingGOOGLE;
+    PFN_vkGetShaderModuleIdentifierEXT fpGetShaderModuleIdentifierEXT;
     uint32_t swapchainImageCount;
     VkSwapchainKHR swapchain;
     SwapchainImageResources *swapchain_image_resources;
@@ -2161,13 +2162,36 @@ static void demo_prepare_pipeline(struct demo *demo) {
 
     shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    shaderStages[0].module = demo->vert_shader_module;
+
+    // shaderStages[0].module = demo->vert_shader_module;
+    shaderStages[0].module = VK_NULL_HANDLE;
     shaderStages[0].pName = "main";
+
+    VkShaderModuleIdentifierEXT vert_shader_id = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_IDENTIFIER_EXT};
+    demo->fpGetShaderModuleIdentifierEXT(demo->device, demo->vert_shader_module, &vert_shader_id);
+
+    VkPipelineShaderStageModuleIdentifierCreateInfoEXT vert_shader_id_ci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT,
+        .identifierSize = vert_shader_id.identifierSize,
+        .pIdentifier = vert_shader_id.identifier};
+
+    shaderStages[0].pNext = &vert_shader_id_ci;
 
     shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    shaderStages[1].module = demo->frag_shader_module;
+    // shaderStages[1].module = demo->frag_shader_module;
+    shaderStages[1].module = VK_NULL_HANDLE;
     shaderStages[1].pName = "main";
+
+    VkShaderModuleIdentifierEXT frag_shader_id = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_IDENTIFIER_EXT};
+    demo->fpGetShaderModuleIdentifierEXT(demo->device, demo->frag_shader_module, &frag_shader_id);
+
+    VkPipelineShaderStageModuleIdentifierCreateInfoEXT frag_shader_id_ci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT,
+        .identifierSize = frag_shader_id.identifierSize,
+        .pIdentifier = frag_shader_id.identifier};
+
+    shaderStages[1].pNext = &frag_shader_id_ci;
 
     memset(&pipelineCache, 0, sizeof(pipelineCache));
     pipelineCache.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -2210,6 +2234,11 @@ static void demo_prepare_pipeline(struct demo *demo) {
     if (err == VK_PIPELINE_COMPILE_REQUIRED_EXT) {
         DbgMsg("VK_PIPELINE_COMPILE_REQUIRED_EXT happened\n");
         pipeline.flags = 0;
+        shaderStages[0].pNext = NULL;
+        shaderStages[0].module = demo->vert_shader_module;
+        shaderStages[1].pNext = NULL;
+        shaderStages[1].module = demo->frag_shader_module;
+
         err = vkCreateGraphicsPipelines(demo->device, demo->pipelineCache, 1, &pipeline, NULL, &demo->pipeline);
     }
     assert(!err);
@@ -3564,6 +3593,8 @@ static void demo_init_vk(struct demo *demo) {
         assert(!err);
 
         for (uint32_t i = 0; i < device_extension_count; i++) {
+            fprintf(stderr, "device_extensions: %s\n", device_extensions[i].extensionName);
+
             if (!strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, device_extensions[i].extensionName)) {
                 swapchainExtFound = 1;
                 demo->extension_names[demo->enabled_extension_count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
@@ -3574,6 +3605,10 @@ static void demo_init_vk(struct demo *demo) {
             if (!strcmp("VK_EXT_pipeline_creation_cache_control", device_extensions[i].extensionName)) {
                 demo->extension_names[demo->enabled_extension_count++] = "VK_EXT_pipeline_creation_cache_control";
                 DbgMsg("VK_EXT_pipeline_creation_cache_control extension enabled\n");
+            }
+            if (!strcmp("VK_EXT_shader_module_identifier", device_extensions[i].extensionName)) {
+                demo->extension_names[demo->enabled_extension_count++] = "VK_EXT_shader_module_identifier";
+                DbgMsg("VK_EXT_shader_module_identifier extension enabled\n");
             }
             assert(demo->enabled_extension_count < 64);
         }
@@ -3677,8 +3712,11 @@ static void demo_init_vk(struct demo *demo) {
     // VkPhysicalDeviceFeatures physDevFeatures;
     // vkGetPhysicalDeviceFeatures(demo->gpu, &physDevFeatures);
 
+    VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT shader_identifier_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT};
+
     VkPhysicalDevicePipelineCreationCacheControlFeatures pipeline_creation_cache_control_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES};
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES, .pNext = &shader_identifier_features};
 
     VkPhysicalDeviceFeatures2 physDevFeatures = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                                  .pNext = &pipeline_creation_cache_control_features};
@@ -3723,8 +3761,13 @@ static void demo_create_device(struct demo *demo) {
         queues[1].flags = 0;
         device.queueCreateInfoCount = 2;
     }
+
+    VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT shader_identifier_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT, .shaderModuleIdentifier = VK_TRUE};
+
     VkPhysicalDevicePipelineCreationCacheControlFeatures pipeline_creation_cache_control_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
+        .pNext = &shader_identifier_features,
         .pipelineCreationCacheControl = VK_TRUE};
 
     device.pNext = &pipeline_creation_cache_control_features;
@@ -3879,6 +3922,7 @@ static void demo_init_vk_swapchain(struct demo *demo) {
     GET_DEVICE_PROC_ADDR(demo->device, GetSwapchainImagesKHR);
     GET_DEVICE_PROC_ADDR(demo->device, AcquireNextImageKHR);
     GET_DEVICE_PROC_ADDR(demo->device, QueuePresentKHR);
+    GET_DEVICE_PROC_ADDR(demo->device, GetShaderModuleIdentifierEXT);
     if (demo->VK_GOOGLE_display_timing_enabled) {
         GET_DEVICE_PROC_ADDR(demo->device, GetRefreshCycleDurationGOOGLE);
         GET_DEVICE_PROC_ADDR(demo->device, GetPastPresentationTimingGOOGLE);
