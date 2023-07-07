@@ -576,7 +576,7 @@ void Demo::cleanup() {
     prepared = false;
     auto result = device.waitIdle();
     VERIFY(result == vk::Result::eSuccess);
-    if (!is_minimized){
+    if (!is_minimized) {
         destroy_swapchain_related_resources();
     }
     // Wait for fences from present operations
@@ -627,6 +627,34 @@ void Demo::cleanup() {
     inst.destroy();
 }
 
+#include <thread>
+const int thread_loop_times = 10000;
+std::vector<vk::Buffer> thread_buffers(thread_loop_times, VK_NULL_HANDLE);
+
+void ThreadCreateBuffers(vk::Device device) {
+    auto const buf_info = vk::BufferCreateInfo().setSize(2);
+    int index = 0;
+
+    while (index < thread_loop_times) {
+        vk::Buffer buffer;
+        auto result = device.createBuffer(&buf_info, nullptr, &buffer);
+        thread_buffers[index] = buffer;
+        index++;
+    }
+}
+
+void ThreadDestoryBuffers(vk::Device device) {
+    int index = 0;
+
+    while (index < thread_loop_times) {
+        if (!thread_buffers[index]) {
+            continue;
+        }
+        device.destroyBuffer(thread_buffers[index]);
+        index++;
+    }
+}
+
 void Demo::create_device() {
     float priorities = 0.0;
 
@@ -642,6 +670,12 @@ void Demo::create_device() {
     auto device_return = gpu.createDevice(deviceInfo);
     VERIFY(device_return.result == vk::Result::eSuccess);
     device = device_return.value;
+
+    std::thread thread_create_buffers(ThreadCreateBuffers, device);
+    std::thread thread_destory_buffers(ThreadDestoryBuffers, device);
+
+    thread_create_buffers.join();
+    thread_destory_buffers.join();
 }
 
 void Demo::destroy_texture(texture_object &tex_objs) {
@@ -1063,7 +1097,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Demo::debug_messenger_callback(VkDebugUtilsMessag
             VkObjectType t = pCallbackData->pObjects[object].objectType;
             if (t == VK_OBJECT_TYPE_INSTANCE || t == VK_OBJECT_TYPE_PHYSICAL_DEVICE || t == VK_OBJECT_TYPE_DEVICE ||
                 t == VK_OBJECT_TYPE_COMMAND_BUFFER || t == VK_OBJECT_TYPE_QUEUE) {
-                message << reinterpret_cast<void*>(static_cast<uintptr_t>(pCallbackData->pObjects[object].objectHandle));
+                message << reinterpret_cast<void *>(static_cast<uintptr_t>(pCallbackData->pObjects[object].objectHandle));
             } else {
                 message << pCallbackData->pObjects[object].objectHandle;
             }
@@ -1151,8 +1185,8 @@ void Demo::init_vk() {
             use_debug_messenger = true;
             enabled_instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         } else if (!strcmp(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, extension.extensionName)) {
-            // We want cube to be able to enumerate drivers that support the portability_subset extension, so we have to enable the
-            // portability enumeration extension.
+            // We want cube to be able to enumerate drivers that support the portability_subset extension, so we have to enable
+            // the portability enumeration extension.
             portabilityEnumerationActive = true;
             enabled_instance_extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
         } else if (!strcmp(VK_KHR_SURFACE_EXTENSION_NAME, extension.extensionName)) {
@@ -1642,7 +1676,7 @@ void Demo::prepare_buffers() {
         height = surfCapabilities.currentExtent.height;
     }
 
-    if (width==0||height==0){
+    if (width == 0 || height == 0) {
         is_minimized = true;
         return;
     } else {
@@ -2349,7 +2383,7 @@ void Demo::destroy_swapchain_related_resources() {
 void Demo::resize() {
     // Don't react to resize until after first initialization.
     if (!prepared) {
-        if(is_minimized) {
+        if (is_minimized) {
             prepare();
         }
         return;
