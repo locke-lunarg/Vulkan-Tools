@@ -3969,12 +3969,26 @@ static void demo_init_vk_swapchain(struct demo *demo) {
 
     demo_create_device(demo);
 
-    vkGetDeviceQueue(demo->device, demo->graphics_queue_family_index, 0, &demo->graphics_queue);
+    // vkGetDeviceQueue(demo->device, demo->graphics_queue_family_index, 0, &demo->graphics_queue);
+    VkDeviceQueueInfo2 queue_info;
+    queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2;
+    queue_info.pNext = NULL;
+    queue_info.flags = VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT;
+    queue_info.queueFamilyIndex = demo->graphics_queue_family_index;
+    queue_info.queueIndex = 0;
+    vkGetDeviceQueue2(demo->device, &queue_info, &demo->graphics_queue);
 
     if (!demo->separate_present_queue) {
         demo->present_queue = demo->graphics_queue;
     } else {
-        vkGetDeviceQueue(demo->device, demo->present_queue_family_index, 0, &demo->present_queue);
+        // vkGetDeviceQueue(demo->device, demo->present_queue_family_index, 0, &demo->present_queue);
+        VkDeviceQueueInfo2 pre_queue_info;
+        pre_queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2;
+        pre_queue_info.pNext = NULL;
+        pre_queue_info.flags = VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT;
+        pre_queue_info.queueFamilyIndex = demo->present_queue_family_index;
+        pre_queue_info.queueIndex = 0;
+        vkGetDeviceQueue2(demo->device, &pre_queue_info, &demo->present_queue);
     }
 
     // Get the list of VkFormat's that are supported:
