@@ -3927,8 +3927,18 @@ static void demo_init_vk_swapchain(struct demo *demo) {
     VkResult U_ASSERT_ONLY err;
 
     demo_create_surface(demo);
+    VkPhysicalDeviceProtectedMemoryProperties pro_mem_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES,
+        .pNext = NULL,
+    };
 
-    // Iterate over each queue to learn whether it supports presenting:
+    VkPhysicalDeviceProtectedMemoryFeatures pro_mem_feas = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES,
+        .pNext = NULL,
+        .protectedMemory = VK_TRUE,
+    };
+
+    //  Iterate over each queue to learn whether it supports presenting:
     VkBool32 *supportsPresent = (VkBool32 *)malloc(demo->queue_family_count * sizeof(VkBool32));
     for (uint32_t i = 0; i < demo->queue_family_count; i++) {
         vkGetPhysicalDeviceSurfaceSupportKHR(demo->gpu, i, demo->surface, &supportsPresent[i]);
