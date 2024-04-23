@@ -3551,7 +3551,7 @@ static void demo_init_vk(struct demo *demo) {
         .applicationVersion = 0,
         .pEngineName = APP_SHORT_NAME,
         .engineVersion = 0,
-        .apiVersion = VK_API_VERSION_1_0,
+        .apiVersion = VK_API_VERSION_1_2,
     };
     VkInstanceCreateInfo inst_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -3783,6 +3783,7 @@ static void demo_init_vk(struct demo *demo) {
 
 static void demo_create_device(struct demo *demo) {
     VkResult U_ASSERT_ONLY err;
+
     float queue_priorities[1] = {0.0};
     VkDeviceQueueCreateInfo queues[2];
     queues[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -3790,11 +3791,16 @@ static void demo_create_device(struct demo *demo) {
     queues[0].queueFamilyIndex = demo->graphics_queue_family_index;
     queues[0].queueCount = 1;
     queues[0].pQueuePriorities = queue_priorities;
-    queues[0].flags = 0;
+    queues[0].flags = VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT;
+
+    VkPhysicalDeviceVulkan11Features features_11 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+        .protectedMemory = VK_TRUE,
+    };
 
     VkDeviceCreateInfo device = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = NULL,
+        .pNext = &features_11,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = queues,
         .enabledLayerCount = 0,
@@ -3809,7 +3815,7 @@ static void demo_create_device(struct demo *demo) {
         queues[1].queueFamilyIndex = demo->present_queue_family_index;
         queues[1].queueCount = 1;
         queues[1].pQueuePriorities = queue_priorities;
-        queues[1].flags = 0;
+        queues[1].flags = VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT;
         device.queueCreateInfoCount = 2;
     }
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
@@ -3933,7 +3939,8 @@ static void demo_init_vk_swapchain(struct demo *demo) {
     uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
     uint32_t presentQueueFamilyIndex = UINT32_MAX;
     for (uint32_t i = 0; i < demo->queue_family_count; i++) {
-        if ((demo->queue_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
+        if (((demo->queue_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) &&
+            ((demo->queue_props[i].queueFlags & VK_QUEUE_PROTECTED_BIT) != 0)) {
             if (graphicsQueueFamilyIndex == UINT32_MAX) {
                 graphicsQueueFamilyIndex = i;
             }
@@ -3970,24 +3977,26 @@ static void demo_init_vk_swapchain(struct demo *demo) {
     demo_create_device(demo);
 
     // vkGetDeviceQueue(demo->device, demo->graphics_queue_family_index, 0, &demo->graphics_queue);
-    VkDeviceQueueInfo2 queue_info;
-    queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2;
-    queue_info.pNext = NULL;
-    queue_info.flags = VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT;
-    queue_info.queueFamilyIndex = demo->graphics_queue_family_index;
-    queue_info.queueIndex = 0;
+    VkDeviceQueueInfo2 queue_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
+        .pNext = NULL,
+        .flags = VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT,
+        .queueFamilyIndex = demo->graphics_queue_family_index,
+        .queueIndex = 0,
+    };
     vkGetDeviceQueue2(demo->device, &queue_info, &demo->graphics_queue);
 
     if (!demo->separate_present_queue) {
         demo->present_queue = demo->graphics_queue;
     } else {
         // vkGetDeviceQueue(demo->device, demo->present_queue_family_index, 0, &demo->present_queue);
-        VkDeviceQueueInfo2 pre_queue_info;
-        pre_queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2;
-        pre_queue_info.pNext = NULL;
-        pre_queue_info.flags = VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT;
-        pre_queue_info.queueFamilyIndex = demo->present_queue_family_index;
-        pre_queue_info.queueIndex = 0;
+        VkDeviceQueueInfo2 pre_queue_info = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
+            .pNext = NULL,
+            .flags = VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT,
+            .queueFamilyIndex = demo->present_queue_family_index,
+            .queueIndex = 0,
+        };
         vkGetDeviceQueue2(demo->device, &pre_queue_info, &demo->present_queue);
     }
 
