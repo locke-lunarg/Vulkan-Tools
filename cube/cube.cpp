@@ -628,8 +628,9 @@ void Demo::cleanup() {
 }
 
 #include <thread>
-const int thread_loop_times = 10000;
+const int thread_loop_times = 100000;
 std::vector<vk::Buffer> thread_buffers(thread_loop_times, VK_NULL_HANDLE);
+std::vector<vk::Image> thread_images(thread_loop_times, VK_NULL_HANDLE);
 
 void ThreadCreateBuffers(vk::Device device) {
     auto const buf_info = vk::BufferCreateInfo().setSize(2);
@@ -655,6 +656,40 @@ void ThreadDestoryBuffers(vk::Device device) {
     }
 }
 
+void ThreadCreateImages(vk::Device device) {
+    auto const image_info = vk::ImageCreateInfo()
+                                .setImageType(vk::ImageType::e2D)
+                                .setFormat(vk::Format::eR8G8B8A8Unorm)
+                                .setExtent({64, 64, 1})
+                                .setMipLevels(1)
+                                .setArrayLayers(1)
+                                .setSamples(vk::SampleCountFlagBits::e1)
+                                .setTiling(vk::ImageTiling::eOptimal)
+                                .setUsage(vk::ImageUsageFlagBits::eDepthStencilAttachment)
+                                .setSharingMode(vk::SharingMode::eExclusive)
+                                .setInitialLayout(vk::ImageLayout::eUndefined);
+    int index = 0;
+
+    while (index < thread_loop_times) {
+        vk::Image image;
+        auto result = device.createImage(&image_info, nullptr, &image);
+        thread_images[index] = image;
+        index++;
+    }
+}
+
+void ThreadDestoryImages(vk::Device device) {
+    int index = 0;
+
+    while (index < thread_loop_times) {
+        if (!thread_images[index]) {
+            continue;
+        }
+        device.destroyImage(thread_images[index]);
+        index++;
+    }
+}
+
 void Demo::create_device() {
     float priorities = 0.0;
 
@@ -673,6 +708,9 @@ void Demo::create_device() {
 
     std::thread thread_create_buffers(ThreadCreateBuffers, device);
     std::thread thread_destory_buffers(ThreadDestoryBuffers, device);
+
+    // std::thread thread_create_images(ThreadCreateImages, device);
+    // std::thread thread_destory_images(ThreadDestoryImages, device);
 
     thread_create_buffers.join();
     thread_destory_buffers.join();
