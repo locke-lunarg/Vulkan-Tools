@@ -67,6 +67,7 @@
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #include "linmath.h"
+#include <thread>
 
 #ifndef NDEBUG
 #define VERIFY(x) assert(x)
@@ -491,6 +492,8 @@ struct Demo {
     vk::Queue present_queue;
     uint32_t graphics_queue_family_index = 0;
     uint32_t present_queue_family_index = 0;
+    uint32_t graphics_queue_index = 0;
+    uint32_t present_queue_index = 0;
     std::array<vk::Semaphore, FRAME_LAG> image_acquired_semaphores;
     std::array<vk::Semaphore, FRAME_LAG> draw_complete_semaphores;
     std::array<vk::Semaphore, FRAME_LAG> image_ownership_semaphores;
@@ -797,14 +800,23 @@ void Demo::cleanup() {
 
 void Demo::create_device() {
     float priorities = 0.0;
+    std::vector<std::vector<float>> prioritiess;
+    prioritiess.resize(queue_props.size());
 
     std::vector<vk::DeviceQueueCreateInfo> queues;
-    queues.push_back(vk::DeviceQueueCreateInfo().setQueueFamilyIndex(graphics_queue_family_index).setQueuePriorities(priorities));
+    // queues.push_back(vk::DeviceQueueCreateInfo().setQueueFamilyIndex(graphics_queue_family_index).setQueuePriorities(priorities));
+    for (uint32_t i = 0; i < queue_props.size(); ++i) {
+        prioritiess[i].resize(queue_props[i].queueCount, priorities);
 
-    if (separate_present_queue) {
+        queues.push_back(vk::DeviceQueueCreateInfo()
+                             .setQueueFamilyIndex(i)
+                             .setQueuePriorities(prioritiess[i]));
+    }
+
+    /* if (separate_present_queue) {
         queues.push_back(
             vk::DeviceQueueCreateInfo().setQueueFamilyIndex(present_queue_family_index).setQueuePriorities(priorities));
-    }
+    }*/
 
     auto deviceInfo = vk::DeviceCreateInfo().setQueueCreateInfos(queues).setPEnabledExtensionNames(enabled_device_extensions);
     auto device_return = gpu.createDevice(deviceInfo);
@@ -1030,6 +1042,7 @@ void Demo::init(int argc, char **argv) {
     height = 500;
     /* Autodetect suitable / best GPU by default */
     gpu_number = -1;
+    validate = true;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--use_staging") == 0) {
@@ -2035,11 +2048,11 @@ void Demo::init_vk_swapchain() {
 
     create_device();
 
-    graphics_queue = device.getQueue(graphics_queue_family_index, 0);
+    graphics_queue = device.getQueue(graphics_queue_family_index, graphics_queue_index);
     if (!separate_present_queue) {
         present_queue = graphics_queue;
     } else {
-        present_queue = device.getQueue(present_queue_family_index, 0);
+        present_queue = device.getQueue(present_queue_family_index, present_queue_index);
     }
 
     // Get the list of VkFormat's that are supported:
@@ -3920,10 +3933,110 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     return (DefWindowProc(hWnd, uMsg, wParam, lParam));
 }
 
+const int thread_loop_times = 5;
+std::vector<vk::Queue> thread_queues(thread_loop_times, VK_NULL_HANDLE);
+std::vector<vk::Fence> thread_fences(thread_loop_times, VK_NULL_HANDLE);
+std::vector<bool> thread_singals(thread_loop_times, false);
+
+void CreateTestObjects(vk::Device device, const std::vector<vk::QueueFamilyProperties> &queue_props,
+                       uint32_t graphics_queue_family_index, uint32_t present_queue_family_index,
+                       uint32_t graphics_queue_index, uint32_t present_queue_index) {
+    uint32_t queue_family_index = 0;
+    uint32_t queue_index = 0;
+    auto fenceInfo = vk::FenceCreateInfo();
+
+    for (uint32_t i = 0; i < thread_loop_times; ++i) {
+        while ((queue_family_index == graphics_queue_family_index && queue_index == graphics_queue_index) ||
+               (queue_family_index == present_queue_family_index && queue_index == present_queue_index) ||
+               queue_index >= queue_props[queue_family_index].queueCount) {
+            ++queue_index;
+
+            if (queue_index >= queue_props[queue_family_index].queueCount) {
+                ++queue_family_index;
+                assert(queue_family_index < queue_props.size());
+                queue_index = 0;
+            }
+        }
+
+        thread_queues[i] = device.getQueue(queue_family_index, queue_index);
+        ++queue_index;
+
+        auto fence_return = device.createFence(fenceInfo);
+        VERIFY(fence_return.result == vk::Result::eSuccess);
+        thread_fences[i] = fence_return.value;
+    }
+}
+
+void ThreadSingals(vk::Device device) {
+    int index = 0;
+
+    while (true) {
+        if (!thread_singals[index]) {
+            auto submit_result = thread_queues[index].submit(vk::SubmitInfo(), thread_fences[index]);
+            VERIFY(submit_result == vk::Result::eSuccess);
+            thread_singals[index] = true;
+        }
+
+        index++;
+        if (index >= thread_loop_times) {
+            index = 0;
+        }
+    }
+}
+
+void ThreadWaits(vk::Device device) {
+    int index = 0;
+
+    while (true) {
+        if (thread_singals[index]) {
+            const vk::Result wait_result = device.waitForFences(thread_fences[index], VK_TRUE, UINT64_MAX);
+            VERIFY(wait_result == vk::Result::eSuccess || wait_result == vk::Result::eTimeout);
+            device.resetFences({thread_fences[index]});
+            thread_singals[index] = false;
+        }
+
+        index++;
+        if (index >= thread_loop_times) {
+            index = 0;
+        }
+    }
+}
+
+MSG msg;    // message
+bool done;  // flag saying when app is complete
+
+void ThreadMain() {
+    done = false;  // initialize loop condition variable
+
+    // main message loop
+    while (!done) {
+        if (demo.pause) {
+            const BOOL succ = WaitMessage();
+
+            if (!succ) {
+                const auto &suppress_popups = demo.suppress_popups;
+                ERR_EXIT("WaitMessage() failed on paused demo", "event loop error");
+            }
+        }
+
+        PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE);
+        if (msg.message == WM_QUIT)  // check for a quit message
+        {
+            done = true;  // if found, quit app
+        } else {
+            /* Translate and dispatch to event queue*/
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+            if (!demo.in_callback) {
+                demo.run();
+            }
+        }
+        RedrawWindow(demo.window, nullptr, nullptr, RDW_INTERNALPAINT);
+    }
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow) {
     // TODO: Gah.. refactor. This isn't 1989.
-    MSG msg;    // message
-    bool done;  // flag saying when app is complete
     int argc;
     char **argv;
 
@@ -3981,30 +4094,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
     demo.prepare();
 
-    done = false;  // initialize loop condition variable
+    CreateTestObjects(demo.device, demo.queue_props, demo.graphics_queue_family_index, demo.present_queue_family_index,
+                      demo.graphics_queue_index, demo.present_queue_index);
 
-    // main message loop
-    while (!done) {
-        if (demo.pause) {
-            const BOOL succ = WaitMessage();
-
-            if (!succ) {
-                const auto &suppress_popups = demo.suppress_popups;
-                ERR_EXIT("WaitMessage() failed on paused demo", "event loop error");
-            }
-        }
-
-        PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE);
-        if (msg.message == WM_QUIT)  // check for a quit message
-        {
-            done = true;  // if found, quit app
-        } else {
-            /* Translate and dispatch to event queue*/
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-        RedrawWindow(demo.window, nullptr, nullptr, RDW_INTERNALPAINT);
-    }
+    std::thread thread_singals(ThreadSingals, demo.device);
+    std::thread thread_waits(ThreadWaits, demo.device);
+    std::thread thread_main(ThreadMain);
+    thread_singals.join();
+    thread_waits.join();
+    thread_main.join();
 
     demo.cleanup();
 
