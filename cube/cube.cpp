@@ -916,7 +916,7 @@ void Demo::draw() {
     static int frame_count = 0;
     ++frame_count;
 
-    if (frame_count > 10) {
+    if (frame_count == 10) {
         auto test_wait_result = device.waitForFences(test_fence, VK_TRUE, UINT64_MAX);
         VERIFY(test_wait_result == vk::Result::eSuccess || test_wait_result == vk::Result::eTimeout);
     }
@@ -1043,7 +1043,6 @@ void Demo::init(int argc, char **argv) {
     height = 500;
     /* Autodetect suitable / best GPU by default */
     gpu_number = -1;
-    validate = true;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--use_staging") == 0) {
