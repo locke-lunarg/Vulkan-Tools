@@ -683,6 +683,10 @@ static void registry_handle_global_remove(void *data, wl_registry *registry, uin
 static const wl_registry_listener registry_listener = {registry_handle_global, registry_handle_global_remove};
 #endif
 
+vk::Fence test_fence = VK_NULL_HANDLE;
+vk::Queue test_queue = VK_NULL_HANDLE;
+const auto test_queue_family_index = 2;
+
 void Demo::build_image_ownership_cmd(const SwapchainImageResources &swapchain_image_resource) {
     auto result = swapchain_image_resource.graphics_to_present_cmd.begin(
         vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse));
@@ -800,6 +804,7 @@ void Demo::create_device() {
 
     std::vector<vk::DeviceQueueCreateInfo> queues;
     queues.push_back(vk::DeviceQueueCreateInfo().setQueueFamilyIndex(graphics_queue_family_index).setQueuePriorities(priorities));
+    queues.push_back(vk::DeviceQueueCreateInfo().setQueueFamilyIndex(test_queue_family_index).setQueuePriorities(priorities));
 
     if (separate_present_queue) {
         queues.push_back(
@@ -906,6 +911,14 @@ void Demo::draw() {
         resize();
     } else {
         VERIFY(present_result == vk::Result::eSuccess);
+    }
+
+    static int frame_count = 0;
+    ++frame_count;
+
+    if (frame_count > 10) {
+        auto test_wait_result = device.waitForFences(test_fence, VK_TRUE, UINT64_MAX);
+        VERIFY(test_wait_result == vk::Result::eSuccess || test_wait_result == vk::Result::eTimeout);
     }
 }
 
@@ -1030,6 +1043,7 @@ void Demo::init(int argc, char **argv) {
     height = 500;
     /* Autodetect suitable / best GPU by default */
     gpu_number = -1;
+    validate = true;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--use_staging") == 0) {
@@ -3978,6 +3992,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     demo.create_surface();
     demo.select_physical_device();
     demo.init_vk_swapchain();
+
+    auto fence_return = demo.device.createFence(vk::FenceCreateInfo());
+    VERIFY(fence_return.result == vk::Result::eSuccess);
+    test_fence = fence_return.value;
+
+    test_queue = demo.device.getQueue(test_queue_family_index, 0);
+    auto submit_result = test_queue.submit(vk::SubmitInfo(), test_fence);
+    VERIFY(submit_result == vk::Result::eSuccess);
 
     demo.prepare();
 
