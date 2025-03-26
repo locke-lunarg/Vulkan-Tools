@@ -683,7 +683,7 @@ static void registry_handle_global_remove(void *data, wl_registry *registry, uin
 static const wl_registry_listener registry_listener = {registry_handle_global, registry_handle_global_remove};
 #endif
 
-vk::Fence test_fence = VK_NULL_HANDLE;
+// vk::Fence test_fence = VK_NULL_HANDLE;
 vk::Semaphore test_semaphore = VK_NULL_HANDLE;
 vk::Queue test_queue = VK_NULL_HANDLE;
 const auto test_queue_family_index = 2;
@@ -918,10 +918,10 @@ void Demo::draw() {
     ++frame_count;
 
     if (frame_count == 10) {
-        auto test_wait_result = device.waitForFences(test_fence, VK_TRUE, UINT64_MAX);
-        VERIFY(test_wait_result == vk::Result::eSuccess || test_wait_result == vk::Result::eTimeout);
+        // auto test_wait_result = device.waitForFences(test_fence, VK_TRUE, UINT64_MAX);
+        // VERIFY(test_wait_result == vk::Result::eSuccess || test_wait_result == vk::Result::eTimeout);
 
-        auto test_submit_result = test_queue.submit(vk::SubmitInfo().setWaitSemaphores(test_semaphore), test_fence);
+        auto test_submit_result = test_queue.submit(vk::SubmitInfo().setWaitSemaphores(test_semaphore) /*, test_fence*/);
         VERIFY(test_submit_result == vk::Result::eSuccess);
     }
 }
@@ -3996,16 +3996,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     demo.select_physical_device();
     demo.init_vk_swapchain();
 
-    auto test_fence_return = demo.device.createFence(vk::FenceCreateInfo());
-    VERIFY(test_fence_return.result == vk::Result::eSuccess);
-    test_fence = test_fence_return.value;
+    //auto test_fence_return = demo.device.createFence(vk::FenceCreateInfo());
+    //VERIFY(test_fence_return.result == vk::Result::eSuccess);
+    //test_fence = test_fence_return.value;
 
     auto test_semaphore_result = demo.device.createSemaphore(vk::SemaphoreCreateInfo());
     VERIFY(test_semaphore_result.result == vk::Result::eSuccess);
     test_semaphore = test_semaphore_result.value;
 
     test_queue = demo.device.getQueue(test_queue_family_index, 0);
-    auto test_submit_result = test_queue.submit(vk::SubmitInfo().setSignalSemaphores(test_semaphore), test_fence);
+    auto test_submit_result = test_queue.submit(vk::SubmitInfo().setSignalSemaphores(test_semaphore) /*, test_fence*/);
     VERIFY(test_submit_result == vk::Result::eSuccess);
 
     demo.prepare();
