@@ -1217,11 +1217,19 @@ static void demo_draw(struct demo *demo) {
         assert(!err);
     }
 
+    static uint64_t present_id = 0;
+    ++present_id;
+    VkPresentIdKHR present_id_info = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_ID_KHR,
+        .swapchainCount = 1,
+        .pPresentIds = &present_id,
+    };
+
     // If we are using separate queues we have to wait for image ownership,
     // otherwise wait for draw complete
     VkPresentInfoKHR present = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .pNext = NULL,
+        .pNext = &present_id_info,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = (demo->separate_present_queue) ? &demo->image_ownership_semaphores[demo->frame_index]
                                                           : &demo->draw_complete_semaphores[demo->frame_index],
@@ -1326,6 +1334,8 @@ static void demo_draw(struct demo *demo) {
     } else {
         assert(!err);
     }
+    VkResult wait_present_result = vkWaitForPresentKHR(demo->device, demo->swapchain, present_id, UINT64_MAX);
+    assert(wait_present_result == VK_SUCCESS || wait_present_result == VK_TIMEOUT);     
 }
 
 static void demo_prepare_buffers(struct demo *demo) {
@@ -4244,6 +4254,9 @@ static void demo_select_physical_device(struct demo *demo) {
     err = vkEnumerateDeviceExtensionProperties(demo->gpu, NULL, &device_extension_count, NULL);
     assert(!err);
 
+    bool support_present_id = false;
+    bool support_present_wait = false;
+
     if (device_extension_count > 0) {
         VkExtensionProperties *device_extensions = malloc(sizeof(VkExtensionProperties) * device_extension_count);
         err = vkEnumerateDeviceExtensionProperties(demo->gpu, NULL, &device_extension_count, device_extensions);
@@ -4257,8 +4270,19 @@ static void demo_select_physical_device(struct demo *demo) {
             if (!strcmp("VK_KHR_portability_subset", device_extensions[i].extensionName)) {
                 demo->extension_names[demo->enabled_extension_count++] = "VK_KHR_portability_subset";
             }
+            if (!strcmp(VK_KHR_PRESENT_ID_EXTENSION_NAME, device_extensions[i].extensionName)) {
+                support_present_id = true;
+                demo->extension_names[demo->enabled_extension_count++] = VK_KHR_PRESENT_ID_EXTENSION_NAME;
+            }
+            if (!strcmp(VK_KHR_PRESENT_WAIT_EXTENSION_NAME, device_extensions[i].extensionName)) {
+                support_present_wait = true;
+                demo->extension_names[demo->enabled_extension_count++] = VK_KHR_PRESENT_WAIT_EXTENSION_NAME;
+            }              
             assert(demo->enabled_extension_count < 64);
         }
+
+        assert(support_present_id);
+        assert(support_present_wait);
 
         if (demo->VK_KHR_incremental_present_enabled) {
             // Even though the user "enabled" the extension via the command
@@ -4366,9 +4390,27 @@ static void demo_create_device(struct demo *demo) {
     queues[0].pQueuePriorities = queue_priorities;
     queues[0].flags = 0;
 
+    VkPhysicalDevicePresentIdFeaturesKHR present_id_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR,
+    };
+
+    VkPhysicalDevicePresentWaitFeaturesKHR present_wait_features = {
+        .pNext = &present_id_features,
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR,
+    };
+    
+    VkPhysicalDeviceFeatures2 feature2 = {
+        .pNext = &present_wait_features,
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,       
+    };
+
+    vkGetPhysicalDeviceFeatures2(demo->gpu, &feature2);
+    assert(present_id_features.presentId);
+    assert(present_wait_features.presentWait);
+
     VkDeviceCreateInfo device = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = NULL,
+        .pNext = &present_wait_features,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = queues,
         .enabledLayerCount = 0,
@@ -4388,6 +4430,8 @@ static void demo_create_device(struct demo *demo) {
     }
     err = vkCreateDevice(demo->gpu, &device, NULL, &demo->device);
     assert(!err);
+    assert(present_id_features.presentId);
+    assert(present_wait_features.presentWait); 
 
     volkLoadDevice(demo->device);
 }

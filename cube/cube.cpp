@@ -806,10 +806,21 @@ void Demo::create_device() {
             vk::DeviceQueueCreateInfo().setQueueFamilyIndex(present_queue_family_index).setQueuePriorities(priorities));
     }
 
-    auto deviceInfo = vk::DeviceCreateInfo().setQueueCreateInfos(queues).setPEnabledExtensionNames(enabled_device_extensions);
+    auto present_id_features = vk::PhysicalDevicePresentIdFeaturesKHR();
+    auto present_wait_features = vk::PhysicalDevicePresentWaitFeaturesKHR().setPNext(&present_id_features);
+    auto physDevFeatures2 = vk::PhysicalDeviceFeatures2().setPNext(&present_wait_features);
+    gpu.getFeatures2(&physDevFeatures2);
+    VERIFY(present_id_features.presentId);
+    VERIFY(present_wait_features.presentWait);
+
+    auto deviceInfo = vk::DeviceCreateInfo().setQueueCreateInfos(queues).setPEnabledExtensionNames(enabled_device_extensions).setPNext(&present_wait_features);
     auto device_return = gpu.createDevice(deviceInfo);
     VERIFY(device_return.result == vk::Result::eSuccess);
     device = device_return.value;
+    
+    VERIFY(present_id_features.presentId);
+    VERIFY(present_wait_features.presentWait);
+
     VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
 }
 
@@ -877,11 +888,14 @@ void Demo::draw() {
         VERIFY(change_owner_result == vk::Result::eSuccess);
     }
 
+    static uint64_t present_id = 0;
+    ++present_id;
+    const auto present_id_info = vk::PresentIdKHR().setSwapchainCount(1).setPPresentIds(&present_id);
     const auto presentInfo = vk::PresentInfoKHR()
                                  .setWaitSemaphores(separate_present_queue ? image_ownership_semaphores[frame_index]
                                                                            : draw_complete_semaphores[frame_index])
                                  .setSwapchains(swapchain)
-                                 .setImageIndices(current_buffer);
+                                 .setImageIndices(current_buffer).setPNext(&present_id_info);
 
     // If we are using separate queues we have to wait for image ownership,
     // otherwise wait for draw complete
@@ -907,6 +921,8 @@ void Demo::draw() {
     } else {
         VERIFY(present_result == vk::Result::eSuccess);
     }
+    auto wait_present_result = device.waitForPresentKHR(swapchain, present_id, UINT64_MAX);
+    VERIFY(wait_present_result == vk::Result::eSuccess || wait_present_result == vk::Result::eTimeout);
 }
 
 void Demo::draw_build_cmd(const SwapchainImageResources &swapchain_image_resource) {
@@ -1874,6 +1890,8 @@ void Demo::select_physical_device() {
     auto device_extension_return = gpu.enumerateDeviceExtensionProperties(device_extension_layer);
     VERIFY(device_extension_return.result == vk::Result::eSuccess);
 
+    bool support_present_id = false;
+    bool support_present_wait = false;
     for (const auto &extension : device_extension_return.value) {
         if (!strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, extension.extensionName)) {
             swapchainExtFound = 1;
@@ -1881,7 +1899,19 @@ void Demo::select_physical_device() {
         } else if (!strcmp("VK_KHR_portability_subset", extension.extensionName)) {
             enabled_device_extensions.push_back("VK_KHR_portability_subset");
         }
+
+        if (!strcmp(VK_KHR_PRESENT_ID_EXTENSION_NAME, extension.extensionName)) {
+            support_present_id = true;
+            enabled_device_extensions.push_back(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+        }
+        if (!strcmp(VK_KHR_PRESENT_WAIT_EXTENSION_NAME, extension.extensionName)) {
+            support_present_wait = true;
+            enabled_device_extensions.push_back(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
+        }        
     }
+
+    VERIFY(support_present_id);
+    VERIFY(support_present_wait);
 
     if (!swapchainExtFound) {
         ERR_EXIT("vkEnumerateDeviceExtensionProperties failed to find the " VK_KHR_SWAPCHAIN_EXTENSION_NAME
