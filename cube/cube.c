@@ -880,11 +880,23 @@ static void demo_set_image_layout(struct demo *demo, VkImage image, VkImageAspec
 }
 
 static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
+
+    VkCommandBufferInheritanceInfo inheritance_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        .pNext = NULL,
+        .renderPass = demo->render_pass,
+        .subpass = 0,
+        .framebuffer = demo->swapchain_image_resources[demo->current_buffer].framebuffer,
+        .occlusionQueryEnable = VK_FALSE,
+        .queryFlags = 0,
+        .pipelineStatistics = 0,
+    };
+
     const VkCommandBufferBeginInfo cmd_buf_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext = NULL,
         .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
-        .pInheritanceInfo = NULL,
+        .pInheritanceInfo = &inheritance_info,
     };
     const VkClearValue clear_values[2] = {
         [0] = {.color.float32 = {0.2f, 0.2f, 0.2f, 0.2f}},
@@ -982,11 +994,22 @@ static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
 void demo_build_image_ownership_cmd(struct demo *demo, int i) {
     VkResult U_ASSERT_ONLY err;
 
+    VkCommandBufferInheritanceInfo inheritance_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        .pNext = NULL,
+        .renderPass = demo->render_pass,
+        .subpass = 0,
+        .framebuffer = demo->swapchain_image_resources[demo->current_buffer].framebuffer,
+        .occlusionQueryEnable = VK_FALSE,
+        .queryFlags = 0,
+        .pipelineStatistics = 0,
+    };
+
     const VkCommandBufferBeginInfo cmd_buf_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext = NULL,
         .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
-        .pInheritanceInfo = NULL,
+        .pInheritanceInfo = &inheritance_info,
     };
     err = vkBeginCommandBuffer(demo->swapchain_image_resources[i].graphics_to_present_cmd, &cmd_buf_info);
     assert(!err);
@@ -2403,11 +2426,23 @@ static void demo_prepare(struct demo *demo) {
     err = vkAllocateCommandBuffers(demo->device, &cmd, &demo->cmd);
     assert(!err);
     demo_name_object(demo, VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)demo->cmd, "PrepareCB");
+
+    VkCommandBufferInheritanceInfo inheritance_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        .pNext = NULL,
+        .renderPass = demo->render_pass,
+        .subpass = 0,
+        .framebuffer = demo->swapchain_image_resources[demo->current_buffer].framebuffer,
+        .occlusionQueryEnable = VK_FALSE,
+        .queryFlags = 0,
+        .pipelineStatistics = 0,
+    };
+
     VkCommandBufferBeginInfo cmd_buf_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext = NULL,
         .flags = 0,
-        .pInheritanceInfo = NULL,
+        .pInheritanceInfo = &inheritance_info,
     };
     err = vkBeginCommandBuffer(demo->cmd, &cmd_buf_info);
     demo_push_cb_label(demo, demo->cmd, NULL, "Prepare");
