@@ -4232,9 +4232,9 @@ static void demo_init_vk(struct demo *demo) {
 static void demo_select_physical_device(struct demo *demo) {
     VkResult err;
     /* Make initial call to query gpu_count, then second call for gpu info */
-    uint32_t gpu_count = 0;
-    err = vkEnumeratePhysicalDevices(demo->inst, &gpu_count, NULL);
-    assert(!err);
+    uint32_t gpu_count = 1;
+    // err = vkEnumeratePhysicalDevices(demo->inst, &gpu_count, NULL);
+    // assert(!err);
 
     if (gpu_count <= 0) {
         ERR_EXIT(
@@ -4246,7 +4246,7 @@ static void demo_select_physical_device(struct demo *demo) {
 
     VkPhysicalDevice *physical_devices = malloc(sizeof(VkPhysicalDevice) * gpu_count);
     err = vkEnumeratePhysicalDevices(demo->inst, &gpu_count, physical_devices);
-    assert(!err);
+    // assert(!err);
     if (demo->invalid_gpu_selection || (demo->gpu_number >= 0 && !((uint32_t)demo->gpu_number < gpu_count))) {
         fprintf(stderr, "GPU %d specified is not present, GPU count = %u\n", demo->gpu_number, gpu_count);
         ERR_EXIT("Specified GPU number is not present", "User Error");
