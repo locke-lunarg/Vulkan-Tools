@@ -1545,6 +1545,8 @@ static void demo_prepare_swapchain(struct demo *demo) {
 
     VkImage *swapchainImages = (VkImage *)malloc(demo->swapchainImageCount * sizeof(VkImage));
     assert(swapchainImages);
+    uint32_t swapchain_image_count = 1;
+    err = vkGetSwapchainImagesKHR(demo->device, demo->swapchain, &swapchain_image_count, swapchainImages);
     err = vkGetSwapchainImagesKHR(demo->device, demo->swapchain, &demo->swapchainImageCount, swapchainImages);
     assert(!err);
 
@@ -2579,7 +2581,7 @@ static void demo_cleanup(struct demo *demo) {
             vkFreeMemory(demo->device, demo->textures[i].mem, NULL);
             vkDestroySampler(demo->device, demo->textures[i].sampler, NULL);
         }
-        vkDestroySwapchainKHR(demo->device, demo->swapchain, NULL);
+        // vkDestroySwapchainKHR(demo->device, demo->swapchain, NULL);
 
         vkDestroyImageView(demo->device, demo->depth.view, NULL);
         vkDestroyImage(demo->device, demo->depth.image, NULL);
@@ -2609,7 +2611,7 @@ static void demo_cleanup(struct demo *demo) {
         }
     }
     vkDeviceWaitIdle(demo->device);
-    vkDestroyDevice(demo->device, NULL);
+    // vkDestroyDevice(demo->device, NULL);
     if (demo->validate) {
         vkDestroyDebugUtilsMessengerEXT(demo->inst, demo->dbg_messenger, NULL);
     }
@@ -2661,7 +2663,7 @@ static void demo_cleanup(struct demo *demo) {
     }
 #endif
 
-    vkDestroyInstance(demo->inst, NULL);
+    // vkDestroyInstance(demo->inst, NULL);
     unload_vulkan_library();
 }
 
